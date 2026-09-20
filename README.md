@@ -7,7 +7,8 @@ Print on a thermal label printer straight from the browser over [WebUSB](https:/
 ## Labels
 
 - Pick a template (Text, Address, Name tag, Shelf, Date), fill in its fields and print. What you typed is remembered per template.
-- **Design your own templates**: rows of blocks (text with a heading, dividers, spaces; up to three side by side), a border, margins, orientation and length. Anything in braces, like `{Product}`, becomes a field to fill in. Templates are saved in your browser.
+- **Design your own templates**: rows of blocks (text with a heading, images, dividers, spaces; up to three side by side), a border, margins, orientation and length. Anything in braces, like `{Product}`, becomes a field to fill in. Templates and their images are saved in your browser and never leave it.
+- **Logos and photos**: a logo prints crisp, a photo is dithered with the darkness of your choice. An image takes a quarter, a third, half or all of the label's width.
 - Templates re-flow to whatever paper is loaded: die-cut labels, continuous rolls (as long as the content needs) and round labels.
 - Landscape templates run along the roll; Fit text takes the room the other rows leave.
 - Labels go in the same print list as cards, with copies, and can be changed from there.

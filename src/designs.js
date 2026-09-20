@@ -13,7 +13,7 @@ import { labelLength, renderLabel } from "./imaging/label-render.js";
 import { layoutMarkers, renderMarkers } from "./imaging/marker-sheet.js";
 import { loadSymbols } from "./imaging/symbols.js";
 import { layoutTextCard, renderTextCard, textMeasure } from "./imaging/text-card.js";
-import { firstValue } from "./labels/template.js";
+import { firstValue, imageIdsOf } from "./labels/template.js";
 import { allMarkers } from "./markers.js";
 import { cardFaces, cardText, imageUrl } from "./scryfall/client.js";
 import { loadStoredImage } from "./store.js";
@@ -75,7 +75,7 @@ export function tokenOf({ id, name, manaCost, typeLine, power, toughness, rules,
 /**
  * A template of your own, filled in: one label for each set of values. The template is kept with
  * the label, so the label stays as it was even if the template changes or goes.
- * @typedef {{ type: "label", template: LabelTemplate, rows: Values[] }} LabelDesign
+ * @typedef {{ type: "label", template: LabelTemplate, rows: Values[], darkness?: Darkness }} LabelDesign
  */
 
 /** @typedef {keyof typeof TONES} Darkness */
@@ -96,8 +96,9 @@ export async function renderDesign(design, media) {
     return renderMarkers(design.counts, media, design.custom);
   }
   if (design.type === "label") {
-    await loadFonts();
-    return design.rows.map((values) => renderLabel(design.template, values, media));
+    const [images] = await Promise.all([loadTemplateImages(design.template), loadFonts()]);
+    const tone = TONES[design.darkness ?? "normal"];
+    return design.rows.map((values) => renderLabel(design.template, values, media, { images, tone }));
   }
 
   const tone = TONES[design.darkness];
@@ -201,6 +202,17 @@ export function paperLength(items, media) {
 async function renderText(card, media, tone) {
   const [symbols] = await Promise.all([loadSymbols(`${card.manaCost} ${card.rules}`), loadFonts()]);
   return renderTextCard(card, media, { tone, symbols });
+}
+
+/**
+ * A template's images, decoded, by ID. One that is no longer saved is left out, so the label still
+ * prints without it.
+ * @param {LabelTemplate} template
+ */
+export async function loadTemplateImages(template) {
+  const ids = [...new Set(imageIdsOf(template))];
+  const loaded = await Promise.all(ids.map((id) => loadStoredImage(id).catch(() => undefined)));
+  return new Map(ids.flatMap((id, i) => (loaded[i] ? [[id, loaded[i]]] : [])));
 }
 
 /**

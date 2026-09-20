@@ -1,11 +1,19 @@
 /** @import { LabelDesign } from "../../designs.js" */
-/** @import { Block, LabelTemplate, Row, TextSize } from "../../labels/template.js" */
+/** @import { Block, ImageBlock, LabelTemplate, Row, TextSize } from "../../labels/template.js" */
 /** @import { LabelSize } from "../label-size.js" */
 import { loadFonts } from "../../imaging/canvas-text.js";
+import { prepareImage } from "../../imaging/images.js";
 import { renderLabel } from "../../imaging/label-render.js";
 import { STARTERS } from "../../labels/starters.js";
-import { fieldsOf, sampleValues, TEXT_SIZES, textBlock } from "../../labels/template.js";
-import { templateStore } from "../../store.js";
+import {
+  fieldsOf,
+  IMAGE_WIDTHS,
+  imageBlock,
+  sampleValues,
+  TEXT_SIZES,
+  textBlock,
+} from "../../labels/template.js";
+import { templateStore, tokenStore } from "../../store.js";
 import { drawBitmap, element, showProblem } from "../dom.js";
 import { toast } from "../toast.js";
 
@@ -15,6 +23,7 @@ const MOST_BLOCKS_IN_A_ROW = 3;
 /** What a new row or block starts as. */
 const NEW_BLOCKS = /** @type {const} */ ({
   text: { name: "Text", make: () => textBlock({ text: "{Text}" }) },
+  image: { name: "Image", make: () => /** @type {Block} */ (imageBlock()) },
   divider: { name: "Divider", make: () => /** @type {Block} */ ({ type: "divider", weight: "thin" }) },
   space: { name: "Space", make: () => /** @type {Block} */ ({ type: "space", size: "m" }) },
 });
@@ -70,6 +79,7 @@ export function createTemplatesView({ labelSize, onShow, onSaved, onPrint, onPre
     deleteQuestion: element("#template-delete-question", HTMLElement),
     confirmDelete: element("#confirm-delete-template", HTMLButtonElement),
     cancelDelete: element("#cancel-delete-template", HTMLButtonElement),
+    imageFile: element("#template-image-file", HTMLInputElement),
   };
   const choice = {
     orientation: /** @type {RadioNodeList} */ (ui.form.elements.namedItem("orientation")),
@@ -284,6 +294,7 @@ export function createTemplatesView({ labelSize, onShow, onSaved, onPrint, onPre
         labelled("Height", id, select(["s", "m", "l"], ["Small", "Medium", "Large"], block.size, "size")),
       ];
     }
+    if (block.type === "image") return imageControls(block, row, position, id);
     const sizes = /** @type {TextSize[]} */ (Object.keys(TEXT_SIZES));
     const names = sizes.map((size) => TEXT_SIZES[size].name);
     const heading = Object.assign(document.createElement("input"), {
@@ -333,6 +344,117 @@ export function createTemplatesView({ labelSize, onShow, onSaved, onPrint, onPre
       ),
       pair(align, bold),
     ];
+  }
+
+  /**
+   * @param {ImageBlock} block
+   * @param {number} row
+   * @param {number} position
+   * @param {string} id
+   * @returns {HTMLElement[]}
+   */
+  function imageControls(block, row, position, id) {
+    const drop = Object.assign(document.createElement("div"), { className: "image-drop block-image" });
+    const choose = Object.assign(document.createElement("button"), {
+      type: "button",
+      className: "button small",
+      textContent: block.image ? "Replace image" : "Choose image",
+    });
+    choose.addEventListener("click", () => {
+      pendingImage = { row, position };
+      ui.imageFile.click();
+    });
+    const words = Object.assign(document.createElement("p"), {
+      textContent: block.image ? "Image added. Drop another here to replace it." : "Drop an image here, or",
+    });
+    drop.append(words, choose);
+    if (block.image) {
+      const remove = Object.assign(document.createElement("button"), {
+        type: "button",
+        className: "button small",
+        textContent: "Remove image",
+      });
+      remove.addEventListener("click", () => {
+        updateBlock(row, position, (b) => ({ ...b, image: undefined }));
+        showRows();
+      });
+      drop.append(remove);
+    }
+    drop.addEventListener("dragover", (event) => {
+      event.preventDefault();
+      drop.classList.add("dragging");
+    });
+    drop.addEventListener("dragleave", () => drop.classList.remove("dragging"));
+    drop.addEventListener("drop", (event) => {
+      event.preventDefault();
+      drop.classList.remove("dragging");
+      const [file] = event.dataTransfer?.files ?? [];
+      if (file) useImage(file, row, position);
+    });
+    const widths = /** @type {(keyof typeof IMAGE_WIDTHS)[]} */ (Object.keys(IMAGE_WIDTHS));
+    const widthNames = widths.map((w) => IMAGE_WIDTHS[w].name);
+    return [
+      drop,
+      pair(
+        labelled("Takes", `${id}-width`, select(widths, widthNames, block.width, "width")),
+        labelled(
+          "Kind",
+          `${id}-treatment`,
+          select(["logo", "photo"], ["Logo, crisp", "Photo, dithered"], block.treatment, "treatment"),
+        ),
+        labelled(
+          "Show",
+          `${id}-show`,
+          select(["fit", "fill"], ["Whole image", "Fill the box"], block.show, "show"),
+        ),
+      ),
+    ];
+  }
+
+  /** The block waiting for the file being chosen. @type {{ row: number, position: number } | undefined} */
+  let pendingImage;
+
+  ui.imageFile.addEventListener("change", () => {
+    const [file] = ui.imageFile.files ?? [];
+    ui.imageFile.value = "";
+    if (file && pendingImage) useImage(file, pendingImage.row, pendingImage.position);
+    pendingImage = undefined;
+  });
+
+  /**
+   * Saves an image in this browser and puts it in a block. Its size is kept with the block so the
+   * label can be laid out before the image is loaded.
+   * @param {File} file
+   * @param {number} row
+   * @param {number} position
+   */
+  async function useImage(file, row, position) {
+    if (!file.type.startsWith("image/")) {
+      showProblem(ui.status, "That file isn't an image. Choose a JPEG, PNG, WebP or SVG image.");
+      return;
+    }
+    ui.status.textContent = "Adding the image…";
+    let image;
+    let size;
+    try {
+      image = await prepareImage(file);
+      const bitmap = await createImageBitmap(image);
+      size = { width: bitmap.width, height: bitmap.height };
+      bitmap.close();
+    } catch {
+      showProblem(ui.status, "This image can't be opened here. Choose a JPEG, PNG, WebP or SVG image.");
+      return;
+    }
+    let id;
+    try {
+      id = await tokenStore.saveImage(image);
+    } catch {
+      showProblem(ui.status, "This browser can't save images, so the image can't be added.");
+      return;
+    }
+    ui.status.textContent = "";
+    updateBlock(row, position, (b) => ({ ...b, image: { id, ...size } }));
+    showRows();
   }
 
   /* Elements */

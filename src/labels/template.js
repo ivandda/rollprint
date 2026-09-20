@@ -30,7 +30,31 @@ export const TEXT_SIZES = /** @type {const} */ ({
 
 /** @typedef {{ type: "divider", weight: "thin" | "thick" }} DividerBlock */
 /** @typedef {{ type: "space", size: "s" | "m" | "l" }} SpaceBlock */
-/** @typedef {TextBlock | DividerBlock | SpaceBlock} Block */
+
+/** How much of the label an image takes, across its row. */
+export const IMAGE_WIDTHS = /** @type {const} */ ({
+  quarter: { name: "A quarter", fraction: 0.25 },
+  third: { name: "A third", fraction: 1 / 3 },
+  half: { name: "Half", fraction: 0.5 },
+  full: { name: "All of it", fraction: 1 },
+});
+
+/**
+ * An image saved in this browser, with its size so the label can be laid out before it is loaded.
+ * @typedef {{ id: string, width: number, height: number }} StoredImage
+ */
+
+/**
+ * A picture: a logo, printed crisp, or a photo, dithered. Without an image yet it takes no room.
+ * @typedef {object} ImageBlock
+ * @property {"image"} type
+ * @property {StoredImage} [image]
+ * @property {keyof typeof IMAGE_WIDTHS} width
+ * @property {"logo" | "photo"} treatment
+ * @property {"fit" | "fill"} show  The whole image inside its box, or the box filled and the image cropped.
+ */
+
+/** @typedef {TextBlock | DividerBlock | SpaceBlock | ImageBlock} Block */
 
 /** Blocks side by side, sharing the width. @typedef {{ blocks: Block[] }} Row */
 
@@ -148,3 +172,26 @@ export const textBlock = (block = {}) => ({
   bold: false,
   ...block,
 });
+
+/**
+ * An image block with the usual choices.
+ * @param {Partial<ImageBlock>} [block]
+ * @returns {ImageBlock}
+ */
+export const imageBlock = (block = {}) => ({
+  type: "image",
+  width: "third",
+  treatment: "logo",
+  show: "fit",
+  ...block,
+});
+
+/**
+ * The IDs of the images a template uses.
+ * @param {LabelTemplate} template
+ */
+export function imageIdsOf(template) {
+  return template.rows.flatMap(({ blocks }) =>
+    blocks.flatMap((block) => (block.type === "image" && block.image ? [block.image.id] : [])),
+  );
+}

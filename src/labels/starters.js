@@ -1,5 +1,5 @@
 /** @import { LabelTemplate } from "./template.js" */
-import { textBlock } from "./template.js";
+import { imageBlock, textBlock } from "./template.js";
 
 /**
  * Templates everyone starts with. They are made of the same blocks as any other, so they double as
@@ -14,6 +14,22 @@ export const STARTERS = [
     border: "none",
     margin: "m",
     rows: [{ blocks: [textBlock({ text: "{Text}", size: "fit", align: "center", bold: true })] }],
+  },
+  {
+    id: "starter-product",
+    name: "Product",
+    orientation: "landscape",
+    border: "thin",
+    margin: "m",
+    rows: [
+      {
+        blocks: [
+          imageBlock({ width: "third" }),
+          textBlock({ heading: "{Product}", headingSize: "l", text: "{Detail}", size: "s" }),
+        ],
+      },
+      { blocks: [textBlock({ text: "www.example.com", size: "xs", align: "end" })] },
+    ],
   },
   {
     id: "starter-address",
