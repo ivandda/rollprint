@@ -1,7 +1,7 @@
 {
-  "name": "mtg-thermal-printer",
+  "name": "rollprint",
   "private": true,
-  "description": "Search Magic: The Gathering cards and print them on a thermal label printer, right from the browser.",
+  "description": "Print on a thermal label printer from the browser: Magic: The Gathering cards and tokens, or your own labels.",
   "license": "AGPL-3.0-only",
   "type": "module",
   "engines": {
