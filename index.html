@@ -190,7 +190,20 @@
       <section class="labels" aria-label="Print a label">
         <h2 class="section-title">Template</h2>
         <ul id="template-list" class="template-list"></ul>
+        <fieldset id="fill-choice" class="form-field">
+          <legend class="visually-hidden">How many labels</legend>
+          <div class="segmented">
+            <label><input type="radio" name="fill" value="one" checked><span>One label</span></label>
+            <label><input type="radio" name="fill" value="many"><span>Many from a list</span></label>
+          </div>
+        </fieldset>
         <form id="label-fields" class="form-grid label-fields" novalidate></form>
+        <div id="label-many-field" class="form-field" hidden>
+          <label for="label-many">One label per line</label>
+          <textarea id="label-many" rows="8" spellcheck="false" autocomplete="off" aria-describedby="label-many-hint"></textarea>
+          <p id="label-many-hint" class="hint">With several fields, separate them with tabs or commas. A first line with the field names sets the order.</p>
+          <p id="label-count" class="hint" aria-live="polite"></p>
+        </div>
         <button id="preview-label" class="print preview-button" type="button">Preview and print</button>
       </section>
 
@@ -198,8 +211,12 @@
         <div id="template-library" hidden>
           <div class="section-head">
             <h2>My templates</h2>
-            <button id="new-template" class="button" type="button">New template</button>
+            <div class="section-actions">
+              <button id="import-template" class="button small" type="button">Import</button>
+              <button id="new-template" class="button" type="button">New template</button>
+            </div>
           </div>
+          <input id="template-file" type="file" accept="application/json,.json" hidden>
           <p id="template-library-status" class="library-status" aria-live="polite"></p>
           <ul id="saved-templates" class="library-list"></ul>
           <p class="hint">Templates are saved in this browser.</p>
@@ -276,6 +293,8 @@
               <div id="template-actions" class="editor-actions">
                 <button id="print-template" class="button small" type="button">Fill in and print</button>
                 <button id="duplicate-template" class="button small" type="button">Duplicate</button>
+                <button id="export-template" class="button small" type="button">Export</button>
+                <button id="link-template" class="button small" type="button">Copy link</button>
                 <button id="delete-template" class="button small" type="button">Delete</button>
               </div>
               <div id="template-delete-confirm" class="editor-actions" hidden>

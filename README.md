@@ -13,6 +13,8 @@ Print on a thermal label printer straight from the browser over [WebUSB](https:/
 - **Typefaces**: Sans, Serif, Mono or Condensed per template, bundled so a template prints the same everywhere.
 - Templates re-flow to whatever paper is loaded: die-cut labels, continuous rolls (as long as the content needs) and round labels.
 - Landscape templates run along the roll; Fit text takes the room the other rows leave.
+- **Many labels from a list**: paste one label per line (tabs or commas between fields, an optional first line naming them). The whole list is one print list item with a page per line.
+- **Share templates**: export a template with its images as a file and import it elsewhere, or copy a link for a template without images.
 - Labels go in the same print list as cards, with copies, and can be changed from there.
 
 ## Cards

@@ -11,12 +11,21 @@ import {
   fieldsOf,
   IMAGE_WIDTHS,
   imageBlock,
+  imageIdsOf,
   qrBlock,
   sampleValues,
   TEXT_SIZES,
   textBlock,
 } from "../../labels/template.js";
+import {
+  LINK_PARAM,
+  readTemplateFile,
+  readTemplateLink,
+  templateLink,
+  writeTemplateFile,
+} from "../../labels/template-file.js";
 import { templateStore, tokenStore } from "../../store.js";
+import { addressParam, updateAddress } from "../address.js";
 import { drawBitmap, element, showProblem } from "../dom.js";
 import { toast } from "../toast.js";
 
@@ -79,6 +88,10 @@ export function createTemplatesView({ labelSize, onShow, onSaved, onPrint, onPre
     actions: element("#template-actions", HTMLElement),
     print: element("#print-template", HTMLButtonElement),
     duplicate: element("#duplicate-template", HTMLButtonElement),
+    exportTemplate: element("#export-template", HTMLButtonElement),
+    link: element("#link-template", HTMLButtonElement),
+    importTemplate: element("#import-template", HTMLButtonElement),
+    importFile: element("#template-file", HTMLInputElement),
     deleteTemplate: element("#delete-template", HTMLButtonElement),
     deleteConfirm: element("#template-delete-confirm", HTMLElement),
     deleteQuestion: element("#template-delete-question", HTMLElement),
@@ -640,12 +653,14 @@ export function createTemplatesView({ labelSize, onShow, onSaved, onPrint, onPre
     if (!ui.library.hidden) showLists();
   });
 
-  function showLibrary() {
+  /** @param {string} [problem]  e.g. why a link couldn't be opened. */
+  function showLibrary(problem) {
     saveNow();
     editing = false;
     ui.editor.hidden = true;
     ui.library.hidden = false;
-    ui.libraryStatus.textContent = "";
+    if (problem) showProblem(ui.libraryStatus, problem);
+    else ui.libraryStatus.textContent = "";
     showLists();
     onShow(undefined);
   }
@@ -715,6 +730,9 @@ export function createTemplatesView({ labelSize, onShow, onSaved, onPrint, onPre
     ui.saveState.textContent = !isSaved() ? "" : canSave ? "Saved in this browser" : "Not saved";
     ui.actions.hidden = confirmingDelete;
     ui.duplicate.hidden = !isSaved();
+    ui.exportTemplate.hidden = !isSaved();
+    // A template with images is too big for a link; it travels as a file.
+    ui.link.hidden = !isSaved() || imageIdsOf(template).length > 0;
     ui.deleteTemplate.hidden = !isSaved();
     ui.deleteConfirm.hidden = !confirmingDelete;
     ui.deleteQuestion.textContent = `Delete ${titleOf(template)}?`;
@@ -725,6 +743,111 @@ export function createTemplatesView({ labelSize, onShow, onSaved, onPrint, onPre
     saveNow();
     onPrint(template);
   });
+
+  /* Files and links */
+
+  ui.exportTemplate.addEventListener("click", async () => {
+    saveNow();
+    /** @type {Map<string, import("../../backup.js").BackupImage>} */
+    const images = new Map();
+    for (const id of new Set(imageIdsOf(template))) {
+      const blob = await tokenStore.getImage(id).catch(() => undefined);
+      if (blob instanceof Blob) {
+        images.set(id, { type: blob.type || "image/webp", bytes: new Uint8Array(await blob.arrayBuffer()) });
+      }
+    }
+    const file = new Blob([writeTemplateFile(template, images)], { type: "application/json" });
+    const name =
+      titleOf(template)
+        .replace(/[^\p{L}\p{N}]+/gu, "-")
+        .replace(/^-|-$/g, "")
+        .toLowerCase() || "template";
+    const anchor = Object.assign(document.createElement("a"), {
+      href: URL.createObjectURL(file),
+      download: `${name}.rollprint.json`,
+    });
+    anchor.click();
+    setTimeout(() => URL.revokeObjectURL(anchor.href), 1000);
+    toast(`Exported ${titleOf(template)}.`);
+  });
+
+  ui.link.addEventListener("click", async () => {
+    saveNow();
+    const link = templateLink(template, `${location.origin}${location.pathname}`);
+    try {
+      await navigator.clipboard.writeText(link);
+      toast("Link copied.");
+      ui.status.textContent = `Opening the link adds ${titleOf(template)} to My templates.`;
+    } catch {
+      const field = Object.assign(document.createElement("input"), {
+        className: "link-field",
+        value: link,
+        readOnly: true,
+      });
+      field.setAttribute("aria-label", `Link to ${titleOf(template)}`);
+      ui.status.replaceChildren(`Copy this link to share ${titleOf(template)}.`, field);
+      field.select();
+    }
+  });
+
+  ui.importTemplate.addEventListener("click", () => ui.importFile.click());
+  ui.importFile.addEventListener("change", () => {
+    const [file] = ui.importFile.files ?? [];
+    ui.importFile.value = "";
+    if (file) importFile(file);
+  });
+
+  /**
+   * Adds the template in a file to My templates, with its images; a template already here with the
+   * same ID is updated.
+   * @param {File} file
+   */
+  async function importFile(file) {
+    let read;
+    try {
+      read = readTemplateFile(await file.text());
+    } catch (error) {
+      showProblem(ui.libraryStatus, error instanceof Error ? error.message : String(error));
+      return;
+    }
+    try {
+      for (const [id, image] of read.images) {
+        await tokenStore.putImage(id, new Blob([image.bytes], { type: image.type }));
+      }
+    } catch {
+      showProblem(ui.libraryStatus, "This browser can't save the template's images.");
+      return;
+    }
+    const existed = saved.some((other) => other.id === read.template.id);
+    edit(read.template);
+    await save();
+    toast(existed ? `Updated ${titleOf(read.template)}.` : `Imported ${titleOf(read.template)}.`);
+  }
+
+  /**
+   * Opens a template from a shared link, adding it to My templates unless it's there already.
+   * @param {string} value  The link's parameter.
+   */
+  function openShared(value) {
+    const shared = readTemplateLink(value);
+    if (!shared) {
+      const message = "This template link is damaged. Ask for the link again.";
+      if (saved.length > 0) showLibrary(message);
+      else {
+        edit(blankTemplate());
+        showProblem(ui.status, message);
+      }
+      return;
+    }
+    const existing = saved.find((other) => other.id === shared.id);
+    edit(existing ?? shared);
+    if (existing) {
+      ui.status.textContent = `${titleOf(existing)} is already in My templates.`;
+    } else {
+      save();
+      toast(`Added ${titleOf(shared)} to My templates.`);
+    }
+  }
 
   ui.duplicate.addEventListener("click", () => {
     saveNow();
@@ -763,19 +886,25 @@ export function createTemplatesView({ labelSize, onShow, onSaved, onPrint, onPre
   /** @param {LabelTemplate[]} templates */
   const byName = (templates) => templates.sort((a, b) => titleOf(a).localeCompare(titleOf(b)));
 
-  /* Start */
+  /* Start: a template from a shared link, My templates, or a blank template when there are none. */
+
+  const linked = addressParam(LINK_PARAM);
+  // Reloading the page shouldn't add the template again.
+  if (linked !== null) updateAddress({ [LINK_PARAM]: undefined });
 
   templateStore.list().then(
     (templates) => {
       saved = byName(templates);
       onSaved(saved);
-      if (editing) showActions();
+      if (linked !== null) openShared(linked);
+      else if (editing) showActions();
       else if (saved.length > 0) showLibrary();
       else edit(blankTemplate());
     },
     () => {
       canSave = false;
-      if (!editing) edit(blankTemplate());
+      if (linked !== null) openShared(linked);
+      else if (!editing) edit(blankTemplate());
     },
   );
 

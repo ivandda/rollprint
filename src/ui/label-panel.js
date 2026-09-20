@@ -237,6 +237,16 @@ export function createLabelPanel({
         media,
       );
       if (id !== renderId) return;
+      if (pages.length === 0) {
+        // Nothing to draw yet, e.g. a list of labels with no lines.
+        state.page = undefined;
+        state.pages = [];
+        ui.label.dataset.state = "empty";
+        showOptions();
+        showPages();
+        updateButtons();
+        return;
+      }
       state.pages = pages;
       state.pageIndex = Math.min(state.pageIndex, pages.length - 1);
       state.page = pages[state.pageIndex];
