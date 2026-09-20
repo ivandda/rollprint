@@ -1,10 +1,12 @@
 /** @import { LabelDesign } from "../../designs.js" */
 /** @import { Block, ImageBlock, LabelTemplate, Row, TextBlock, TextSize } from "../../labels/template.js" */
+
 /** @import { LabelSize } from "../label-size.js" */
 import { FONTS, loadFonts } from "../../imaging/fonts.js";
 import { prepareImage } from "../../imaging/images.js";
 import { AUTO_LENGTH_MM } from "../../imaging/label-layout.js";
 import { renderLabel } from "../../imaging/label-render.js";
+import { movedBetweenRows, movedInRow } from "../../labels/arrange.js";
 import { STARTERS } from "../../labels/starters.js";
 import {
   BARCODE_HEIGHTS,
@@ -31,8 +33,6 @@ import { drawBitmap, dropDown, element, showProblem } from "../dom.js";
 import { toast } from "../toast.js";
 
 const SAVE_DELAY_MS = 400;
-/** How many parts can print side by side. */
-const MOST_BESIDE = 3;
 
 /** What can be put on a label, and what each starts as. */
 const PARTS = /** @type {const} */ ({
@@ -56,41 +56,6 @@ const blankTemplate = () => ({
 
 /** @param {LabelTemplate} template */
 const titleOf = (template) => template.name.trim() || "Untitled template";
-
-/**
- * A block as the designer shows it: in reading order, with whether it sits beside the one before
- * it. The rows a template prints in follow from that.
- * @typedef {{ block: Block, beside: boolean }} Part
- */
-
-/** @param {Row[]} rows @returns {Part[]} */
-const partsOf = (rows) =>
-  rows.flatMap(({ blocks }) => blocks.map((block, index) => ({ block, beside: index > 0 })));
-
-/** @param {Part[]} parts @returns {Row[]} */
-function rowsOf(parts) {
-  /** @type {Row[]} */
-  const rows = [];
-  for (const { block, beside } of parts) {
-    const last = rows.at(-1);
-    if (beside && last) last.blocks.push(block);
-    else rows.push({ blocks: [block] });
-  }
-  return rows;
-}
-
-/**
- * The parts with the blocks at two places swapped. Where each place sits, beside or below, stays,
- * so moving a part never changes the shape of the label.
- * @param {Part[]} parts
- * @param {number} from
- * @param {number} to
- */
-function swapped(parts, from, to) {
-  const blocks = parts.map(({ block }) => block);
-  [blocks[from], blocks[to]] = [blocks[to], blocks[from]];
-  return parts.map((part, index) => ({ ...part, block: blocks[index] }));
-}
 
 /**
  * The Templates tab: My templates, saved in this browser, and the designer for one. Templates save
@@ -157,8 +122,8 @@ export function createTemplatesView({ labelSize, onShow, onSaved, onPrint, onPre
   let canSave = true;
 
   const isSaved = () => saved.some((other) => other.id === template.id);
-  /** @returns {LabelDesign} */
-  const design = () => ({ type: "label", template, rows: [sampleValues(template)] });
+  /** The template with sample values, shown the way it reads. @returns {LabelDesign} */
+  const design = () => ({ type: "label", template, rows: [sampleValues(template)], upright: true });
 
   /* The template's look */
 
@@ -253,53 +218,39 @@ export function createTemplatesView({ labelSize, onShow, onSaved, onPrint, onPre
 
   /** The parts as one list; those that print side by side are bracketed together. */
   function showParts() {
-    let index = 0;
     ui.parts.replaceChildren(
       ...template.rows.map((row, r) => {
         const holder = Object.assign(document.createElement("div"), { className: "part-row" });
-        holder.append(...row.blocks.map((block, b) => partElement(block, r, b, index++)));
+        holder.append(...row.blocks.map((block, b) => partElement(block, r, b)));
         return holder;
       }),
     );
   }
 
   /**
+   * A part's card: its name, arrows that move it the way the label reads, Remove, and its settings.
    * @param {Block} block
    * @param {number} row
    * @param {number} position  In its row.
-   * @param {number} index  In reading order.
    */
-  function partElement(block, row, position, index) {
-    const parts = partsOf(template.rows);
+  function partElement(block, row, position) {
     const holder = Object.assign(document.createElement("div"), { className: "part" });
     holder.dataset.row = String(row);
     holder.dataset.block = String(position);
     const head = Object.assign(document.createElement("div"), { className: "part-head" });
+    const { rows } = template;
+    const moves = /** @type {const} */ ([
+      ["Move up", "↑", movedBetweenRows(rows, row, position, -1)],
+      ["Move down", "↓", movedBetweenRows(rows, row, position, 1)],
+      ["Move left", "←", movedInRow(rows, row, position, -1)],
+      ["Move right", "→", movedInRow(rows, row, position, 1)],
+    ]);
     head.append(
       Object.assign(document.createElement("span"), {
         className: "part-kind",
         textContent: PARTS[block.type].name,
       }),
-    );
-    if (index > 0) {
-      const beside = position > 0;
-      // Joining the row above is offered while the two rows together fit side by side.
-      const full =
-        !beside && template.rows[row - 1].blocks.length + template.rows[row].blocks.length > MOST_BESIDE;
-      const toggle = tool(
-        beside ? "Put it on its own line" : "Put it beside the one above",
-        "Beside the one above",
-        full,
-        () => setRows(rowsOf(parts.map((part, i) => (i === index ? { ...part, beside: !beside } : part)))),
-      );
-      toggle.setAttribute("aria-pressed", String(beside));
-      head.append(toggle);
-    }
-    head.append(
-      tool("Move up", "↑", index === 0, () => setRows(rowsOf(swapped(parts, index, index - 1)))),
-      tool("Move down", "↓", index === parts.length - 1, () =>
-        setRows(rowsOf(swapped(parts, index, index + 1))),
-      ),
+      ...moves.map(([title, arrow, next]) => tool(title, arrow, !next, () => next && setRows(next))),
       tool("Remove", "Remove", false, () => {
         const rows = template.rows
           .map((other, r) => (r === row ? { blocks: other.blocks.filter((_, b) => b !== position) } : other))

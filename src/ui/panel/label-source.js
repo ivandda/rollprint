@@ -1,5 +1,6 @@
 /** @import { LabelDesign } from "../../designs.js" */
 /** @import { PanelHooks, Source } from "./source.js" */
+import { isTurned } from "../../imaging/label-layout.js";
 import { firstValue, isBlank } from "../../labels/template.js";
 
 /** Whether the darkness choice changes anything: only photos are dithered. @param {LabelDesign} design */
@@ -44,10 +45,16 @@ export function createLabelSource({ panel }) {
 
     design: (darkness) => design && { ...design, darkness },
 
-    heading() {
+    heading(media) {
       if (!design) return { name: "", detail: "" };
       const { template, rows } = design;
-      const detail = rows.length === 1 ? firstValue(template, rows[0]) : `${rows.length} labels`;
+      const detail = sample
+        ? isTurned(template, media)
+          ? "Shown the way it reads. It prints turned, along the roll."
+          : ""
+        : rows.length === 1
+          ? firstValue(template, rows[0])
+          : `${rows.length} labels`;
       return { name: template.name.trim() || "Untitled template", detail };
     },
 
