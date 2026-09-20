@@ -1,6 +1,6 @@
 /** @import { Block, LabelTemplate, TextSize, Values } from "../labels/template.js" */
 /** @import { Media } from "../printers/types.js" */
-import { BARCODE_HEIGHTS, fill, IMAGE_WIDTHS, TEXT_SIZES } from "../labels/template.js";
+import { BARCODE_HEIGHTS, fill, IMAGE_WIDTHS, isQuarterTurned, TEXT_SIZES } from "../labels/template.js";
 import { barcodeModules, code128, code128Text } from "./barcode.js";
 
 /** Room between the border and the content, in millimetres. */
@@ -238,8 +238,8 @@ function placeBlock(block, values, width, dots, measure, mm) {
 
 /**
  * The box an image or QR code takes: its share of the label across, as tall as the image's
- * proportions make it (square for a QR code), and never taller than the label. Nothing without an
- * image.
+ * proportions make it (square for a QR code, and the other way round for an image turned a
+ * quarter), and never taller than the label. Nothing without an image.
  * @param {Block} block
  * @param {Values} values
  * @param {number} basis  What the share is of.
@@ -249,7 +249,8 @@ function imageSize(block, values, basis, tallest) {
   if (block.type !== "image" && block.type !== "qr") return undefined;
   if (block.type === "image" && !block.image) return { width: 0, height: 0 };
   if (block.type === "qr" && !fill(block.content, values).trim()) return { width: 0, height: 0 };
-  const aspect = block.type === "image" && block.image ? block.image.height / block.image.width : 1;
+  const upright = block.type === "image" && block.image ? block.image.height / block.image.width : 1;
+  const aspect = block.type === "image" && isQuarterTurned(block) ? 1 / upright : upright;
   let width = IMAGE_WIDTHS[block.width].fraction * basis;
   let height = width * aspect;
   if (height > tallest) {

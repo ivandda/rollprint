@@ -18,6 +18,7 @@ import {
   qrBlock,
   sampleValues,
   TEXT_SIZES,
+  TURNS,
   textBlock,
 } from "../../labels/template.js";
 import {
@@ -441,6 +442,13 @@ export function createTemplatesView({ labelSize, onShow, onSaved, onPrint, onPre
     );
     const kind = select(["logo", "photo"], ["Logo, crisp", "Photo, dithered"], block.treatment, "treatment");
     const show = select(["fit", "fill"], ["Whole image", "Fill the box"], block.show, "show");
+    const turns = /** @type {(keyof typeof TURNS)[]} */ (Object.keys(TURNS));
+    const turn = select(
+      turns,
+      turns.map((t) => TURNS[t].name),
+      block.turn ?? "none",
+      "turn",
+    );
     const grid = Object.assign(document.createElement("div"), { className: "part-grid" });
     grid.append(
       labelFor("Width", `${id}-width`, width),
@@ -449,6 +457,8 @@ export function createTemplatesView({ labelSize, onShow, onSaved, onPrint, onPre
       kind,
       labelFor("Show", `${id}-show`, show),
       show,
+      labelFor("Turn", `${id}-turn`, turn),
+      turn,
     );
     return [drop, grid];
   }
