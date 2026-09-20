@@ -1,7 +1,7 @@
 /** @import { LabelDesign } from "../../designs.js" */
 /** @import { LabelTemplate, Values } from "../../labels/template.js" */
 /** @import { LabelSize } from "../label-size.js" */
-import { loadFonts } from "../../imaging/canvas-text.js";
+import { loadFonts } from "../../imaging/fonts.js";
 import { renderLabel } from "../../imaging/label-render.js";
 import { STARTERS } from "../../labels/starters.js";
 import { fieldsOf, sampleValues } from "../../labels/template.js";
@@ -77,7 +77,7 @@ export function createPrintView({ labelSize, onShow, onPreview }) {
         button.append(preview, name);
         button.addEventListener("click", () => choose(other));
         item.append(button);
-        loadFonts()
+        loadFonts(other.font)
           .then(() => drawBitmap(preview, renderLabel(other, sampleValues(other), media, { upright: true })))
           .catch(() => {
             // The template can be chosen without its preview.

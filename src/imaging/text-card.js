@@ -3,8 +3,9 @@
 /** @import { Word } from "./rules-text.js" */
 import { placeImage } from "./arrangement.js";
 import { ditherToBitmap, pasteBitmap, thresholdToBitmap } from "./bitmap.js";
-import { canvasContext, fitLine, font, TEXT_THRESHOLD } from "./canvas-text.js";
+import { canvasContext, fitLine, TEXT_THRESHOLD } from "./canvas-text.js";
 import { cardSize } from "./card.js";
+import { font } from "./fonts.js";
 import { fitRules, parseRules, textHeight, wrapParagraph } from "./rules-text.js";
 
 const CARD_WIDTH_MM = 63;

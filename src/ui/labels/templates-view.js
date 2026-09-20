@@ -1,14 +1,17 @@
 /** @import { LabelDesign } from "../../designs.js" */
 /** @import { Block, ImageBlock, LabelTemplate, Row, TextSize } from "../../labels/template.js" */
 /** @import { LabelSize } from "../label-size.js" */
-import { loadFonts } from "../../imaging/canvas-text.js";
+import { FONTS, loadFonts } from "../../imaging/fonts.js";
 import { prepareImage } from "../../imaging/images.js";
 import { renderLabel } from "../../imaging/label-render.js";
 import { STARTERS } from "../../labels/starters.js";
 import {
+  BARCODE_HEIGHTS,
+  barcodeBlock,
   fieldsOf,
   IMAGE_WIDTHS,
   imageBlock,
+  qrBlock,
   sampleValues,
   TEXT_SIZES,
   textBlock,
@@ -24,6 +27,8 @@ const MOST_BLOCKS_IN_A_ROW = 3;
 const NEW_BLOCKS = /** @type {const} */ ({
   text: { name: "Text", make: () => textBlock({ text: "{Text}" }) },
   image: { name: "Image", make: () => /** @type {Block} */ (imageBlock()) },
+  qr: { name: "QR code", make: () => /** @type {Block} */ (qrBlock()) },
+  barcode: { name: "Barcode", make: () => /** @type {Block} */ (barcodeBlock()) },
   divider: { name: "Divider", make: () => /** @type {Block} */ ({ type: "divider", weight: "thin" }) },
   space: { name: "Space", make: () => /** @type {Block} */ ({ type: "space", size: "m" }) },
 });
@@ -86,6 +91,7 @@ export function createTemplatesView({ labelSize, onShow, onSaved, onPrint, onPre
     border: /** @type {RadioNodeList} */ (ui.form.elements.namedItem("border")),
     margin: /** @type {RadioNodeList} */ (ui.form.elements.namedItem("margin")),
     length: /** @type {RadioNodeList} */ (ui.form.elements.namedItem("length")),
+    font: element("#template-font", HTMLSelectElement),
   };
 
   /** Saved templates, by name. @type {LabelTemplate[]} */
@@ -127,6 +133,7 @@ export function createTemplatesView({ labelSize, onShow, onSaved, onPrint, onPre
       border: /** @type {LabelTemplate["border"]} */ (choice.border.value || "none"),
       margin: /** @type {LabelTemplate["margin"]} */ (choice.margin.value || "m"),
       lengthMm: fixed && lengthMm > 0 ? lengthMm : undefined,
+      font: /** @type {LabelTemplate["font"]} */ (choice.font.value in FONTS ? choice.font.value : "sans"),
     };
     ui.lengthMm.disabled = !fixed;
     changed();
@@ -158,15 +165,9 @@ export function createTemplatesView({ labelSize, onShow, onSaved, onPrint, onPre
     const setting = target.dataset.setting ?? target.name;
     /** @type {Block} */
     let next;
-    if (current.type === "text") {
-      next = {
-        ...current,
-        [setting]:
-          target instanceof HTMLInputElement && target.type === "checkbox" ? target.checked : target.value,
-      };
-    } else {
-      next = { ...current, [setting]: target.value };
-    }
+    const value =
+      target instanceof HTMLInputElement && target.type === "checkbox" ? target.checked : target.value;
+    next = /** @type {Block} */ ({ ...current, [setting]: value });
     updateBlock(row, block, () => next);
   }
 
@@ -295,6 +296,52 @@ export function createTemplatesView({ labelSize, onShow, onSaved, onPrint, onPre
       ];
     }
     if (block.type === "image") return imageControls(block, row, position, id);
+    const widths = /** @type {(keyof typeof IMAGE_WIDTHS)[]} */ (Object.keys(IMAGE_WIDTHS));
+    if (block.type === "qr") {
+      const content = Object.assign(document.createElement("input"), {
+        name: "content",
+        value: block.content,
+        autocomplete: "off",
+        placeholder: "A link or text, e.g. {Link}",
+      });
+      const widthNames = widths.map((w) => IMAGE_WIDTHS[w].name);
+      return [
+        pair(
+          labelled("Content", `${id}-content`, content),
+          labelled("Takes", `${id}-width`, select(widths, widthNames, block.width, "width")),
+        ),
+      ];
+    }
+    if (block.type === "barcode") {
+      const content = Object.assign(document.createElement("input"), {
+        name: "content",
+        value: block.content,
+        autocomplete: "off",
+        placeholder: "Letters and digits, e.g. {Code}",
+      });
+      const heights = /** @type {(keyof typeof BARCODE_HEIGHTS)[]} */ (Object.keys(BARCODE_HEIGHTS));
+      const caption = document.createElement("label");
+      caption.className = "checkbox";
+      caption.append(
+        Object.assign(document.createElement("input"), {
+          type: "checkbox",
+          name: "text",
+          checked: block.text,
+        }),
+        "Text under it",
+      );
+      return [
+        pair(
+          labelled("Content", `${id}-content`, content),
+          labelled(
+            "Height",
+            `${id}-height`,
+            select(heights, ["Small", "Medium", "Large"], block.height, "height"),
+          ),
+        ),
+        caption,
+      ];
+    }
     const sizes = /** @type {TextSize[]} */ (Object.keys(TEXT_SIZES));
     const names = sizes.map((size) => TEXT_SIZES[size].name);
     const heading = Object.assign(document.createElement("input"), {
@@ -630,7 +677,7 @@ export function createTemplatesView({ labelSize, onShow, onSaved, onPrint, onPre
       ui.name.focus();
     });
     const preview = /** @type {HTMLCanvasElement} */ (item.querySelector("canvas"));
-    loadFonts()
+    loadFonts(other.font)
       .then(() => drawBitmap(preview, renderLabel(other, sampleValues(other), media, { upright: true })))
       .catch(() => {
         // The template can be opened without its preview.
@@ -650,6 +697,7 @@ export function createTemplatesView({ labelSize, onShow, onSaved, onPrint, onPre
     choice.border.value = next.border;
     choice.margin.value = next.margin;
     choice.length.value = next.lengthMm ? "fixed" : "auto";
+    choice.font.value = next.font ?? "sans";
     ui.lengthMm.value = next.lengthMm ? String(next.lengthMm) : "";
     ui.lengthMm.disabled = !next.lengthMm;
     ui.status.textContent = "";

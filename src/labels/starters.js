@@ -1,5 +1,5 @@
 /** @import { LabelTemplate } from "./template.js" */
-import { imageBlock, textBlock } from "./template.js";
+import { barcodeBlock, imageBlock, qrBlock, textBlock } from "./template.js";
 
 /**
  * Templates everyone starts with. They are made of the same blocks as any other, so they double as
@@ -59,6 +59,33 @@ export const STARTERS = [
     rows: [
       { blocks: [textBlock({ heading: "{Name}", headingSize: "fit", align: "center" })] },
       { blocks: [textBlock({ text: "{Detail}", size: "s", align: "center" })] },
+    ],
+  },
+  {
+    id: "starter-qr-link",
+    name: "QR link",
+    orientation: "landscape",
+    border: "none",
+    margin: "m",
+    rows: [
+      {
+        blocks: [
+          qrBlock({ content: "{Link}", width: "third" }),
+          textBlock({ heading: "{Title}", headingSize: "l", text: "Scan for more", size: "s" }),
+        ],
+      },
+    ],
+  },
+  {
+    id: "starter-inventory",
+    name: "Inventory",
+    orientation: "landscape",
+    border: "none",
+    margin: "m",
+    font: "mono",
+    rows: [
+      { blocks: [textBlock({ heading: "{Item}", headingSize: "m" })] },
+      { blocks: [barcodeBlock({ content: "{Code}", height: "m", text: true })] },
     ],
   },
   {

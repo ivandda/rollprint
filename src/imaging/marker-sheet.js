@@ -2,7 +2,8 @@
 /** @import { Bitmap, Media } from "../printers/types.js" */
 import { allMarkers } from "../markers.js";
 import { thresholdToBitmap } from "./bitmap.js";
-import { canvasContext, fitLine, font, TEXT_THRESHOLD } from "./canvas-text.js";
+import { canvasContext, fitLine, TEXT_THRESHOLD } from "./canvas-text.js";
+import { font } from "./fonts.js";
 import { parseRules, wrapParagraph } from "./rules-text.js";
 
 /** Marker sizes in millimetres, before stretching to fill a row or shrinking to fit a small label. */

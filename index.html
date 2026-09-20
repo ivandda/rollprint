@@ -218,13 +218,22 @@
               <label for="template-name">Name</label>
               <input id="template-name" name="name" autocomplete="off">
             </div>
+            <div class="form-field">
+              <label for="template-font">Typeface</label>
+              <select id="template-font" name="font">
+                <option value="sans">Sans</option>
+                <option value="serif">Serif</option>
+                <option value="mono">Mono</option>
+                <option value="condensed">Condensed</option>
+              </select>
+            </div>
             <fieldset class="form-field">
               <legend>Orientation</legend>
               <div class="segmented">
                 <label><input type="radio" name="orientation" value="landscape" checked><span>Landscape</span></label>
                 <label><input type="radio" name="orientation" value="portrait"><span>Portrait</span></label>
               </div>
-              <p class="hint">Landscape runs along a continuous roll.</p>
+              <p class="hint">Landscape reads along the label's longer side: along a continuous roll, or across a wide short label.</p>
             </fieldset>
             <fieldset class="form-field">
               <legend>Border</legend>

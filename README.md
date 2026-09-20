@@ -9,6 +9,8 @@ Print on a thermal label printer straight from the browser over [WebUSB](https:/
 - Pick a template (Text, Address, Name tag, Shelf, Date), fill in its fields and print. What you typed is remembered per template.
 - **Design your own templates**: rows of blocks (text with a heading, images, dividers, spaces; up to three side by side), a border, margins, orientation and length. Anything in braces, like `{Product}`, becomes a field to fill in. Templates and their images are saved in your browser and never leave it.
 - **Logos and photos**: a logo prints crisp, a photo is dithered with the darkness of your choice. An image takes a quarter, a third, half or all of the label's width.
+- **QR codes and barcodes**: a QR code of a link or text per label, and Code 128 barcodes with the text under them, scaled to whole dots so they scan.
+- **Typefaces**: Sans, Serif, Mono or Condensed per template, bundled so a template prints the same everywhere.
 - Templates re-flow to whatever paper is loaded: die-cut labels, continuous rolls (as long as the content needs) and round labels.
 - Landscape templates run along the roll; Fit text takes the room the other rows leave.
 - Labels go in the same print list as cards, with copies, and can be changed from there.
@@ -67,7 +69,7 @@ Pushes to `main` run the checks and deploy to GitHub Pages.
 
 ## Credits and license
 
-Card data and images from [Scryfall](https://scryfall.com), within its [rate limits](https://scryfall.com/docs/api/rate-limits). Typeface: [Atkinson Hyperlegible Next](https://github.com/googlefonts/atkinson-hyperlegible-next) (SIL OFL).
+Card data and images from [Scryfall](https://scryfall.com), within its [rate limits](https://scryfall.com/docs/api/rate-limits). Typefaces, all under the SIL OFL: [Atkinson Hyperlegible Next](https://github.com/googlefonts/atkinson-hyperlegible-next), [Source Serif 4](https://github.com/adobe-fonts/source-serif), [JetBrains Mono](https://github.com/JetBrains/JetBrainsMono) and [Oswald](https://github.com/googlefonts/OswaldFont). QR codes by [Nayuki's qrcodegen](https://www.nayuki.io/page/qr-code-generator-library) (MIT), vendored in `src/vendor`.
 
 Copyright © 2026 Ivan, under the [GNU AGPL-3.0](LICENSE): free to use, share and change, and any version you distribute or host must stay open source.
 
