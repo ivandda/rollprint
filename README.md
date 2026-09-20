@@ -1,10 +1,10 @@
-# MTG Thermal Printer
+# Rollprint
 
-Search Magic: The Gathering cards and tokens and print them as stickers on a thermal label printer, straight from the browser over [WebUSB](https://developer.mozilla.org/en-US/docs/Web/API/WebUSB_API). No drivers or installs.
+Print on a thermal label printer straight from the browser over [WebUSB](https://developer.mozilla.org/en-US/docs/Web/API/WebUSB_API). No drivers or installs. Today it prints Magic: The Gathering cards and tokens as stickers; a mode for your own labels and templates is next.
 
-**[Open the app](https://ivandda.github.io/mtg-thermal-printer/)**
+**[Open the app](https://ivandda.github.io/rollprint/)**
 
-## What it does
+## MTG Thermal Printer
 
 - **Search** tokens or any paper card, with [Scryfall syntax](https://scryfall.com/docs/syntax) (`c:g power>=4`). Pick the printing and side, or both sides of a double-faced card to fold, and open the tokens and emblems a card makes.
 - **Preview** the exact black-and-white print, with darkness, paper size and border options.
@@ -28,7 +28,7 @@ On 62 × 100 mm die-cut labels (Brother DK-11202) a card prints at 59 × 82 mm, 
 | QL-500, 550, 560, 570, 600, 650TD, 710W, 720NW, 800, 810W, 820NWB | Untested |
 | QL-1050, 1060N, 1100, 1110NWB, 1115NWB (labels up to 104 mm) | Untested |
 
-The untested models get the same bytes [brother_ql](https://github.com/pklaus/brother_ql) sends them. If you have one, please [open an issue](https://github.com/ivandda/mtg-thermal-printer/issues) and say whether it prints. Windows and Linux aren't tested yet.
+The untested models get the same bytes [brother_ql](https://github.com/pklaus/brother_ql) sends them. If you have one, please [open an issue](https://github.com/ivandda/rollprint/issues) and say whether it prints. Windows and Linux aren't tested yet.
 
 ## Windows
 

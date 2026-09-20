@@ -3,9 +3,9 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <meta name="description" content="Search Magic: The Gathering cards and tokens and print them on a Brother QL label printer.">
+    <meta name="description" content="Print on a Brother QL label printer from the browser: Magic: The Gathering cards and tokens, or your own labels.">
     <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' https://*.scryfall.io; connect-src https://api.scryfall.com https://*.scryfall.io; base-uri 'none'; form-action 'none'">
-    <title>MTG Thermal Printer</title>
+    <title>Rollprint</title>
     <link rel="icon" href="src/favicon.svg" type="image/svg+xml">
     <link rel="preload" href="src/fonts/atkinson-hyperlegible-next.woff2" as="font" type="font/woff2" crossorigin>
     <link rel="stylesheet" href="src/app.css">
@@ -13,7 +13,7 @@
   </head>
   <body data-view="results" data-mode="find">
     <header class="bar">
-      <a class="name" href="./">MTG Thermal Printer</a>
+      <a class="name" href="./">Rollprint</a>
       <div class="bar-actions">
         <button id="open-list" class="button list-button" type="button" aria-haspopup="dialog">
           Print list <span id="list-count" class="count" hidden></span>
@@ -320,7 +320,7 @@
       <p>
         Card data and images from <a href="https://scryfall.com">Scryfall</a>. Magic: The Gathering is a
         trademark of Wizards of the Coast. Not affiliated with Wizards of the Coast, Scryfall or Brother.
-        <a href="https://github.com/ivandda/mtg-thermal-printer">Source code</a>
+        <a href="https://github.com/ivandda/rollprint">Source code</a>
       </p>
     </footer>
 

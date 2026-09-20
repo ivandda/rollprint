@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { cardLink, LINK_PARAM, readCardLink } from "../src/card-link.js";
 
-const PAGE = "https://ivandda.github.io/mtg-thermal-printer/?q=goblin#top";
+const PAGE = "https://ivandda.github.io/rollprint/?q=goblin#top";
 
 /** @type {TokenArt} */
 const ART = {
@@ -38,7 +38,7 @@ const linkValue = (link) => new URL(link).searchParams.get(LINK_PARAM) ?? "";
 test("a card comes back from its link as it was, and the link opens Create", () => {
   const link = cardLink(AETHER, PAGE);
   const url = new URL(link);
-  assert.equal(url.origin + url.pathname, "https://ivandda.github.io/mtg-thermal-printer/");
+  assert.equal(url.origin + url.pathname, "https://ivandda.github.io/rollprint/");
   assert.equal(url.searchParams.get("mode"), "create");
   assert.equal(url.hash, "");
   assert.match(linkValue(link), /^[A-Za-z0-9_-]+$/);

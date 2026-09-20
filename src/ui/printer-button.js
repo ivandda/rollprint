@@ -6,7 +6,7 @@ import { element } from "./dom.js";
 
 const ON_WINDOWS = /Windows/.test(navigator.userAgent);
 const WINDOWS_GUIDE = {
-  href: "https://github.com/ivandda/mtg-thermal-printer#windows",
+  href: "https://github.com/ivandda/rollprint#windows",
   text: "How to set it up",
 };
 
