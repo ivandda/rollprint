@@ -1,6 +1,6 @@
 /** @import { Bitmap, Media } from "../printers/types.js" */
 import { pasteBitmap } from "./bitmap.js";
-import { CUT_LINE } from "./marker-sheet.js";
+import { CUT_LINE } from "./cut-lines.js";
 
 /** Blank paper on each side of the fold where the printer doesn't say how much it feeds, in millimetres. */
 const FOLD_MARGIN_MM = 3;

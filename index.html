@@ -4,7 +4,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="description" content="Print on a Brother QL label printer from the browser: Magic: The Gathering cards and tokens, or your own labels.">
-    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' https://*.scryfall.io; connect-src https://api.scryfall.com https://*.scryfall.io; base-uri 'none'; form-action 'none'">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' https://*.scryfall.io https://covers.openlibrary.org https://archive.org https://*.archive.org https://*.mzstatic.com; connect-src https://api.scryfall.com https://*.scryfall.io https://openlibrary.org https://covers.openlibrary.org https://archive.org https://*.archive.org https://itunes.apple.com https://*.mzstatic.com; base-uri 'none'; form-action 'none'">
     <title>Rollprint</title>
     <link rel="icon" href="src/favicon.svg" type="image/svg+xml">
     <link rel="preload" href="src/fonts/atkinson-hyperlegible-next.woff2" as="font" type="font/woff2" crossorigin>
@@ -27,6 +27,10 @@
         <button type="button" data-space="labels">
           <span class="mode-option-name">Labels</span>
           <span class="mode-option-detail">Your own labels, from templates you design</span>
+        </button>
+        <button type="button" data-space="books">
+          <span class="mode-option-name">Books</span>
+          <span class="mode-option-detail">Book covers, one to a label or a sheet of them</span>
         </button>
       </div>
       <div class="bar-actions">
@@ -179,6 +183,36 @@
           <button id="preview-markers" class="print preview-button" type="button">Preview and print</button>
           <button id="clear-markers" class="text-button" type="button" hidden>Clear all</button>
         </div>
+      </section>
+
+      <fieldset class="modes books-tabs">
+        <legend class="visually-hidden">Books</legend>
+        <label><input type="radio" name="mode" value="books"><span class="tab">Books</span></label>
+      </fieldset>
+
+      <section class="books" aria-label="Book covers">
+        <search>
+          <form id="book-search" class="search" novalidate>
+            <label for="book-query" class="visually-hidden">Search for a book</label>
+            <input id="book-query" type="search" placeholder="Title, author or ISBN" autocomplete="off" enterkeyhint="search">
+            <button class="button" type="submit">Search</button>
+          </form>
+        </search>
+        <section class="shelf-section" aria-labelledby="shelf-title">
+          <div class="shelf-heading">
+            <h2 id="shelf-title">Your covers</h2>
+            <span id="shelf-count" class="shelf-count"></span>
+          </div>
+          <p id="shelf-empty" class="hint">Search for a book and pick it to print its cover. Pick several and they're printed side by side on as few pages as possible, so one cut separates two covers.</p>
+          <ul id="shelf" class="shelf" hidden></ul>
+          <div class="markers-footer">
+            <button id="preview-books" class="print preview-button" type="button">Preview and print</button>
+            <button id="clear-books" class="text-button" type="button" hidden>Clear all</button>
+          </div>
+        </section>
+        <p id="book-status" class="book-status" aria-live="polite"></p>
+        <ul id="book-results" class="book-results"></ul>
+
       </section>
 
       <fieldset class="modes labels-tabs">
@@ -458,6 +492,16 @@
               <input id="zoom" name="zoom" type="range" min="1" max="4" step="0.01" value="1">
             </div>
           </div>
+          <fieldset id="cover-size-field" class="field" hidden>
+            <legend>Cover size</legend>
+            <label class="visually-hidden" for="cover-size">Cover size</label>
+            <select id="cover-size" name="cover-size">
+              <option value="full">Full label &mdash; one cover</option>
+              <option value="large">Large &mdash; two across</option>
+              <option value="medium">Medium &mdash; three across</option>
+              <option value="small">Small &mdash; four across</option>
+            </select>
+          </fieldset>
           <fieldset id="darkness-field" class="field">
             <legend>Darkness</legend>
             <div class="segmented">
@@ -534,6 +578,34 @@
             <span class="library-detail"></span>
           </span>
         </button>
+      </li>
+    </template>
+
+    <template id="book-result">
+      <li class="book-result">
+        <button type="button">
+          <img alt="" loading="lazy" width="90" height="135">
+          <span class="book-title"></span>
+          <span class="book-author"></span>
+        </button>
+      </li>
+    </template>
+
+    <template id="shelf-row">
+      <li class="shelf-row">
+        <img class="shelf-cover" alt="" loading="lazy" width="40" height="60">
+        <div class="shelf-text">
+          <span class="shelf-title"></span>
+          <span class="shelf-author"></span>
+        </div>
+        <div class="stepper">
+          <button type="button" data-step="-1" aria-label="One fewer">−</button>
+          <input type="number" inputmode="numeric" min="1" max="20" aria-label="Copies">
+          <button type="button" data-step="1" aria-label="One more">+</button>
+        </div>
+        <button class="text-button sharper" type="button">Sharper cover</button>
+        <button class="remove" type="button">Remove</button>
+        <p class="sharper-offer" hidden></p>
       </li>
     </template>
 

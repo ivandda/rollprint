@@ -1,9 +1,12 @@
+/** @import { ShelfBook } from "./books/shelf.js" */
 /** @import { MarkerSelection } from "./markers.js" */
+import { createBookClient } from "./books/client.js";
 import { tokenOf } from "./designs.js";
 import { PrintList } from "./print-list.js";
 import { PrinterConnection } from "./printers/connection.js";
 import { createScryfallClient, ScryfallError } from "./scryfall/client.js";
 import { addressParam, updateAddress } from "./ui/address.js";
+import { createBooks } from "./ui/books.js";
 import { createDeck } from "./ui/deck.js";
 import { element } from "./ui/dom.js";
 import { createLabelPanel } from "./ui/label-panel.js";
@@ -20,6 +23,7 @@ import { createTokenEditor } from "./ui/token-editor.js";
 import { createViews } from "./ui/views.js";
 
 const scryfall = createScryfallClient();
+const bookClient = createBookClient();
 const printer = new PrinterConnection();
 const labelSize = new LabelSize(printer);
 const printList = new PrintList();
@@ -38,6 +42,9 @@ const views = createViews({ onClose: () => panel.cancelEdit() });
 /** The Markers tab's own selection, put back if changing a marker sheet is cancelled.
  * @type {MarkerSelection | undefined} */
 let markersBeforeEdit;
+/** The Books tab's own shelf, put back if changing a sheet of covers is cancelled.
+ * @type {ShelfBook[] | undefined} */
+let booksBeforeEdit;
 
 const panel = createLabelPanel({
   scryfall,
@@ -52,6 +59,8 @@ const panel = createLabelPanel({
   onEditEnd(result, id) {
     if (result !== "saved" && markersBeforeEdit) markers.show(markersBeforeEdit);
     markersBeforeEdit = undefined;
+    if (result !== "saved" && booksBeforeEdit) books.show(booksBeforeEdit);
+    booksBeforeEdit = undefined;
     labels.restore();
     modes.refreshBack();
     modes.allowSwitching(true);
@@ -80,6 +89,13 @@ const markers = createMarkersPicker({
   },
   onPreview: views.openLabel,
 });
+const books = createBooks({
+  books: bookClient,
+  onChange(shelf) {
+    if (document.body.dataset.mode === "books") panel.showBooks(shelf);
+  },
+  onPreview: views.openLabel,
+});
 const labels = createPrintView({
   labelSize,
   onShow(design) {
@@ -102,6 +118,7 @@ const templates = createTemplatesView({
 const modes = createModes((mode) => {
   if (mode === "create") panel.showToken(tokens.current());
   else if (mode === "markers") panel.showMarkers(markers.current());
+  else if (mode === "books") panel.showBooks(books.current());
   else if (mode === "labels") panel.showLabel(labels.current());
   else if (mode === "templates") panel.showLabel(templates.current(), { sample: true });
   else panel.showCards();
@@ -138,6 +155,10 @@ const list = createPrintListDialog({
       markersBeforeEdit = markers.current();
       modes.show("markers");
       markers.show({ counts: design.counts, custom: design.custom ?? [] });
+    } else if (design.type === "book") {
+      booksBeforeEdit = books.current();
+      modes.show("books");
+      books.show(design.shelf);
     } else if (design.type === "label") {
       modes.show("labels");
       labels.edit(design);
