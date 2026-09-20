@@ -1,0 +1,161 @@
+import assert from "node:assert/strict";
+import { test } from "node:test";
+import { AUTO_LENGTH_MM, frameOf, layoutLabel, MARGINS } from "../../src/imaging/label-layout.js";
+import { TEXT_SIZES, textBlock } from "../../src/labels/template.js";
+import { MEDIA } from "../../src/printers/brother-ql/media.js";
+
+const DPMM = 300 / 25.4;
+/** Each character is half the text size wide. @type {import("../../src/imaging/label-layout.js").MeasureText} */
+const measure = (text, size) => text.length * size * 0.5;
+
+/** @param {string} id */
+function media(id) {
+  const found = MEDIA.find((label) => label.id === id);
+  assert.ok(found, `unknown label ${id}`);
+  return found;
+}
+
+/**
+ * @param {Partial<import("../../src/labels/template.js").LabelTemplate>} template
+ * @returns {import("../../src/labels/template.js").LabelTemplate}
+ */
+const template = (template) => ({
+  id: "t",
+  name: "T",
+  orientation: "portrait",
+  border: "none",
+  margin: "m",
+  rows: [],
+  ...template,
+});
+
+test("landscape turns the frame and a continuous roll leaves the length to the content", () => {
+  assert.deepEqual(frameOf(template({}), media("62x29")), { width: 696, height: 271 });
+  assert.deepEqual(frameOf(template({ orientation: "landscape" }), media("62x29")), {
+    width: 271,
+    height: 696,
+  });
+  assert.deepEqual(frameOf(template({}), media("62")), { width: 696, height: 0 });
+  assert.deepEqual(frameOf(template({ orientation: "landscape" }), media("62")), { width: 0, height: 696 });
+  assert.deepEqual(frameOf(template({ lengthMm: 50 }), media("62")), {
+    width: 696,
+    height: Math.round(50 * DPMM),
+  });
+  const round = frameOf(template({ orientation: "landscape" }), media("d58"));
+  assert.equal(round.width, round.height);
+  assert.equal(round.width, Math.floor(media("d58").printableWidth / Math.SQRT2));
+});
+
+test("rows stack from the top with named sizes and sit in the middle of a fixed label", () => {
+  const t = template({
+    rows: [
+      { blocks: [textBlock({ text: "One", size: "m" })] },
+      { blocks: [textBlock({ text: "Two", size: "m" })] },
+    ],
+  });
+  const layout = layoutLabel(t, {}, { width: 696, height: 400 }, DPMM, measure);
+  const [one, two] = layout.blocks;
+  const line = TEXT_SIZES.m.mm * DPMM * 1.2;
+  assert.equal(one.text?.size, TEXT_SIZES.m.mm * DPMM);
+  assert.ok(two.y > one.y + line - 1);
+  const content = two.y + two.height - one.y;
+  assert.ok(Math.abs(one.y - (400 - content) / 2) <= 1, "centred vertically");
+  assert.equal(one.x, Math.round(MARGINS.m * DPMM));
+  assert.equal(one.width, 696 - 2 * Math.round(MARGINS.m * DPMM));
+});
+
+test("blocks in a row share the width", () => {
+  const t = template({
+    margin: "s",
+    rows: [{ blocks: [textBlock({ text: "L" }), textBlock({ text: "R" })] }],
+  });
+  const layout = layoutLabel(t, {}, { width: 700, height: 300 }, DPMM, measure);
+  const [left, right] = layout.blocks;
+  assert.equal(left.width, right.width);
+  assert.ok(right.x > left.x + left.width);
+  assert.ok(right.x + right.width <= 700);
+});
+
+test("text wraps to the block's width", () => {
+  const t = template({ rows: [{ blocks: [textBlock({ text: "aaaa bbbb cccc dddd", size: "m" })] }] });
+  const narrow = layoutLabel(t, {}, { width: 200, height: 0 }, DPMM, measure);
+  const wide = layoutLabel(t, {}, { width: 2000, height: 0 }, DPMM, measure);
+  assert.equal(wide.blocks[0].text?.lines.length, 1);
+  assert.ok((narrow.blocks[0].text?.lines.length ?? 0) > 1);
+});
+
+test("Fit text fills the width when the length is free, and the room left when it is fixed", () => {
+  const t = template({ margin: "s", rows: [{ blocks: [textBlock({ text: "Hello", size: "fit" })] }] });
+  const free = layoutLabel(t, {}, { width: 500, height: 0 }, DPMM, measure);
+  const width = 500 - 2 * Math.round(MARGINS.s * DPMM);
+  assert.equal(free.blocks[0].text?.size, Math.floor(width / 2.5)); // 5 characters at half the size each
+  const fixed = layoutLabel(t, {}, { width: 500, height: 100 }, DPMM, measure);
+  const room = 100 - 2 * Math.round(MARGINS.s * DPMM);
+  assert.equal(fixed.blocks[0].text?.size, Math.floor(room / 1.2));
+});
+
+test("Fit text takes what the named rows leave", () => {
+  const t = template({
+    margin: "s",
+    rows: [
+      { blocks: [textBlock({ text: "Small line", size: "s" })] },
+      { blocks: [textBlock({ text: "BIG", size: "fit" })] },
+    ],
+  });
+  const layout = layoutLabel(t, {}, { width: 2000, height: 300 }, DPMM, measure);
+  const [small, big] = layout.blocks;
+  assert.ok((big.text?.size ?? 0) > (small.text?.size ?? 0));
+  assert.ok(big.y + big.height <= 300 - Math.round(MARGINS.s * DPMM) + 1);
+});
+
+test("a continuous label is as long as its content, within limits", () => {
+  const short = template({ rows: [{ blocks: [textBlock({ text: "Hi", size: "s" })] }] });
+  assert.equal(
+    layoutLabel(short, {}, { width: 696, height: 0 }, DPMM, measure).height,
+    Math.round(AUTO_LENGTH_MM.min * DPMM),
+  );
+  const long = template({ rows: [{ blocks: [textBlock({ text: "line\n".repeat(200), size: "xl" })] }] });
+  assert.equal(
+    layoutLabel(long, {}, { width: 696, height: 0 }, DPMM, measure).height,
+    Math.round(AUTO_LENGTH_MM.max * DPMM),
+  );
+  const some = template({ rows: [{ blocks: [textBlock({ text: "a\nb\nc\nd\ne\nf", size: "l" })] }] });
+  const layout = layoutLabel(some, {}, { width: 696, height: 0 }, DPMM, measure);
+  const inset = Math.round(MARGINS.m * DPMM);
+  assert.equal(layout.height, Math.round(6 * TEXT_SIZES.l.mm * DPMM * 1.2 + 2 * inset));
+});
+
+test("a label as wide as its content gets the widest row, and other rows stretch to it", () => {
+  const t = template({
+    margin: "s",
+    rows: [
+      { blocks: [textBlock({ text: "Short", size: "m" })] },
+      { blocks: [textBlock({ text: "A much longer line", size: "m" })] },
+    ],
+  });
+  const layout = layoutLabel(t, {}, { width: 0, height: 696 }, DPMM, measure);
+  const size = TEXT_SIZES.m.mm * DPMM;
+  const widest = "A much longer line".length * size * 0.5;
+  assert.equal(layout.width, Math.round(widest + 2 * Math.round(MARGINS.s * DPMM)));
+  assert.equal(layout.blocks[0].width, layout.blocks[1].width);
+});
+
+test("content taller than a fixed label shrinks every size alike", () => {
+  const t = template({
+    rows: [{ blocks: [textBlock({ heading: "Head", headingSize: "xl", text: "a\nb\nc\nd", size: "l" })] }],
+  });
+  const layout = layoutLabel(t, {}, { width: 696, height: 300 }, DPMM, measure);
+  const [block] = layout.blocks;
+  assert.ok(block.y >= 0);
+  assert.ok(block.y + block.height <= 300 + 1);
+  assert.ok((block.heading?.size ?? 0) < TEXT_SIZES.xl.mm * DPMM);
+  const ratio = (block.heading?.size ?? 0) / (block.text?.size ?? 1);
+  assert.ok(Math.abs(ratio - TEXT_SIZES.xl.mm / TEXT_SIZES.l.mm) < 0.05);
+});
+
+test("placeholders are filled before measuring, and a border is drawn around the whole label", () => {
+  const t = template({ border: "thick", rows: [{ blocks: [textBlock({ text: "{Name}", size: "m" })] }] });
+  const layout = layoutLabel(t, { Name: "Ada" }, { width: 300, height: 100 }, DPMM, measure);
+  assert.deepEqual(layout.blocks[0].text?.lines, ["Ada"]);
+  assert.deepEqual(layout.border, { x: 0, y: 0, width: 300, height: 100 });
+});

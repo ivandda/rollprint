@@ -1,4 +1,5 @@
 /** @import { Arrangement } from "./imaging/arrangement.js" */
+/** @import { LabelTemplate, Values } from "./labels/template.js" */
 /** @import { Marker } from "./markers.js" */
 /** @import { TextCard } from "./imaging/text-card.js" */
 /** @import { Bitmap, Media } from "./printers/types.js" */
@@ -8,9 +9,11 @@ import { canvasContext, loadFonts } from "./imaging/canvas-text.js";
 import { cardSize, renderCard, TONES } from "./imaging/card.js";
 import { foldedPage, foldMargin } from "./imaging/fold.js";
 import { loadImage } from "./imaging/images.js";
+import { labelLength, renderLabel } from "./imaging/label-render.js";
 import { layoutMarkers, renderMarkers } from "./imaging/marker-sheet.js";
 import { loadSymbols } from "./imaging/symbols.js";
 import { layoutTextCard, renderTextCard, textMeasure } from "./imaging/text-card.js";
+import { firstValue } from "./labels/template.js";
 import { allMarkers } from "./markers.js";
 import { cardFaces, cardText, imageUrl } from "./scryfall/client.js";
 import { loadStoredImage } from "./token-store.js";
@@ -18,7 +21,7 @@ import { loadStoredImage } from "./token-store.js";
 /**
  * What a label shows, as plain data: enough to draw it again on any label size, and to save it with
  * the print list.
- * @typedef {CardDesign | TokenDesign | MarkersDesign} Design
+ * @typedef {CardDesign | TokenDesign | MarkersDesign | LabelDesign} Design
  */
 
 /**
@@ -69,6 +72,12 @@ export function tokenOf({ id, name, manaCost, typeLine, power, toughness, rules,
  * @typedef {{ type: "markers", counts: Record<string, number>, custom?: Marker[] }} MarkersDesign
  */
 
+/**
+ * A template of your own, filled in: one label for each set of values. The template is kept with
+ * the label, so the label stays as it was even if the template changes or goes.
+ * @typedef {{ type: "label", template: LabelTemplate, rows: Values[] }} LabelDesign
+ */
+
 /** @typedef {keyof typeof TONES} Darkness */
 
 /** @typedef {(typeof TONES)[Darkness]} Tone */
@@ -85,6 +94,10 @@ export async function renderDesign(design, media) {
   if (design.type === "markers") {
     await loadFonts();
     return renderMarkers(design.counts, media, design.custom);
+  }
+  if (design.type === "label") {
+    await loadFonts();
+    return design.rows.map((values) => renderLabel(design.template, values, media));
   }
 
   const tone = TONES[design.darkness];
@@ -147,6 +160,9 @@ export function labelLengths(design, media) {
   if (design.type === "markers") {
     return layoutMarkers(design.counts, media, design.custom).map((page) => page.height);
   }
+  if (design.type === "label") {
+    return design.rows.map((values) => labelLength(design.template, values, media));
+  }
   const length = media.printableHeight || cardSize(media).height;
   if (!printsBothSides(design)) return [length];
   return media.lengthMm ? [length, length] : [2 * (length + foldMargin(media))];
@@ -158,6 +174,7 @@ export function labelLengths(design, media) {
  * @param {Media} media
  */
 export function pageCount(design, media) {
+  if (design.type === "label") return design.rows.length;
   return labelLengths(design, media).length;
 }
 
@@ -229,6 +246,11 @@ const statsOf = ({ power, toughness }) => (power || toughness ? `${power}/${toug
  * @param {Design} design
  */
 export function describeDesign(design) {
+  if (design.type === "label") {
+    const { template, rows } = design;
+    const detail = rows.length === 1 ? firstValue(template, rows[0]) : `${rows.length} labels`;
+    return { name: template.name.trim() || "Untitled template", detail };
+  }
   if (design.type === "markers") {
     const chosen = allMarkers(design.custom ?? [])
       .filter(({ id }) => design.counts[id])

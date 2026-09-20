@@ -11,9 +11,24 @@
     <link rel="stylesheet" href="src/app.css">
     <script type="module" src="src/app.js"></script>
   </head>
-  <body data-view="results" data-mode="find">
+  <body data-view="results" data-mode="find" data-space="cards">
     <header class="bar">
-      <a class="name" href="./">Rollprint</a>
+      <div class="brand">
+        <a class="name" href="./">Rollprint</a>
+        <button id="mode-switch" class="mode-switch" type="button" popovertarget="mode-menu" aria-haspopup="menu">
+          <span id="mode-name">Cards</span>
+        </button>
+      </div>
+      <div id="mode-menu" class="mode-menu" popover>
+        <button type="button" data-space="cards">
+          <span class="mode-option-name">Cards</span>
+          <span class="mode-option-detail">Magic cards, tokens, markers and decks</span>
+        </button>
+        <button type="button" data-space="labels">
+          <span class="mode-option-name">Labels</span>
+          <span class="mode-option-detail">Your own labels, from templates</span>
+        </button>
+      </div>
       <div class="bar-actions">
         <button id="open-list" class="button list-button" type="button" aria-haspopup="dialog">
           Print list <span id="list-count" class="count" hidden></span>
@@ -33,7 +48,7 @@
       </section>
 
       <div class="choose">
-      <fieldset class="modes">
+      <fieldset class="modes cards-tabs">
         <legend class="visually-hidden">What to print</legend>
         <label><input type="radio" name="mode" value="find" checked><span class="tab">Find cards</span></label>
         <label><input type="radio" name="mode" value="create"><span class="tab">Create</span></label>
@@ -80,21 +95,21 @@
           <button id="restore-first" class="text-button" type="button" hidden>Restore a backup</button>
           <p id="save-state" class="save-state"></p>
         </div>
-        <form id="token-form" class="token-form" novalidate>
-          <div class="token-field">
+        <form id="token-form" class="form-grid" novalidate>
+          <div class="form-field">
             <label for="token-name">Name</label>
             <input id="token-name" name="name" autocomplete="off">
           </div>
-          <div class="token-field">
+          <div class="form-field">
             <label for="token-cost">Mana cost</label>
             <input id="token-cost" name="cost" autocomplete="off" aria-describedby="cost-hint">
             <p id="cost-hint" class="hint">Write it in braces, like {2}{G}. Leave it empty for a token.</p>
           </div>
-          <div class="token-field">
+          <div class="form-field">
             <label for="token-type">Type</label>
             <input id="token-type" name="type" autocomplete="off" placeholder="Token Creature — Goblin">
           </div>
-          <fieldset class="token-field">
+          <fieldset class="form-field">
             <legend>Power and toughness</legend>
             <div class="stats-inputs">
               <input id="token-power" name="power" autocomplete="off" aria-label="Power">
@@ -102,12 +117,12 @@
               <input id="token-toughness" name="toughness" autocomplete="off" aria-label="Toughness">
             </div>
           </fieldset>
-          <div class="token-field">
+          <div class="form-field">
             <label for="token-rules">Rules text</label>
             <textarea id="token-rules" name="rules" rows="4" aria-describedby="rules-hint"></textarea>
             <p id="rules-hint" class="hint">Write symbols in braces, like {T} or {R}.</p>
           </div>
-          <fieldset class="token-field">
+          <fieldset class="form-field">
             <legend>Image</legend>
             <p class="hint">Images never leave your device.</p>
             <div id="image-drop" class="image-drop">
@@ -164,6 +179,13 @@
           <button id="preview-markers" class="print preview-button" type="button">Preview and print</button>
           <button id="clear-markers" class="text-button" type="button" hidden>Clear all</button>
         </div>
+      </section>
+
+      <section class="labels" aria-label="Print a label">
+        <h2 class="section-title">Template</h2>
+        <ul id="template-list" class="template-list"></ul>
+        <form id="label-fields" class="form-grid label-fields" novalidate></form>
+        <button id="preview-label" class="print preview-button" type="button">Preview and print</button>
       </section>
 
       <section class="deck" aria-label="Deck">

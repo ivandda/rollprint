@@ -8,6 +8,7 @@ import { createDeck } from "./ui/deck.js";
 import { element } from "./ui/dom.js";
 import { createLabelPanel } from "./ui/label-panel.js";
 import { LabelSize } from "./ui/label-size.js";
+import { createPrintView } from "./ui/labels/print-view.js";
 import { createMarkersPicker } from "./ui/markers-picker.js";
 import { createModes } from "./ui/modes.js";
 import { createPrintListDialog } from "./ui/print-list-dialog.js";
@@ -50,6 +51,7 @@ const panel = createLabelPanel({
   onEditEnd(result, id) {
     if (result !== "saved" && markersBeforeEdit) markers.show(markersBeforeEdit);
     markersBeforeEdit = undefined;
+    labels.restore();
     modes.refreshBack();
     if (switchingLabels || result === "dropped") return;
     // Escape ends the edit while the key is still being handled, so the sheet is opened after it.
@@ -76,9 +78,17 @@ const markers = createMarkersPicker({
   },
   onPreview: views.openLabel,
 });
+const labels = createPrintView({
+  labelSize,
+  onShow(design) {
+    if (document.body.dataset.mode === "labels") panel.showLabel(design);
+  },
+  onPreview: views.openLabel,
+});
 const modes = createModes((mode) => {
   if (mode === "create") panel.showToken(tokens.current());
   else if (mode === "markers") panel.showMarkers(markers.current());
+  else if (mode === "labels") panel.showLabel(labels.current());
   else panel.showCards();
 });
 const search = createSearch({
@@ -113,6 +123,9 @@ const list = createPrintListDialog({
       markersBeforeEdit = markers.current();
       modes.show("markers");
       markers.show({ counts: design.counts, custom: design.custom ?? [] });
+    } else if (design.type === "label") {
+      modes.show("labels");
+      labels.edit(design);
     } else {
       modes.show("find");
     }
