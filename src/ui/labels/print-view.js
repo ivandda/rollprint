@@ -24,8 +24,8 @@ export function createPrintView({ labelSize, onShow, onPreview }) {
     fields: element("#label-fields", HTMLFormElement),
     preview: element("#preview-label", HTMLButtonElement),
   };
-  /** @type {LabelTemplate[]} */
-  const templates = STARTERS;
+  /** Templates of your own first, then the starters. @type {LabelTemplate[]} */
+  let templates = STARTERS;
   /** @type {LabelTemplate} */
   let template = templates.find(({ id }) => id === readSetting("labelTemplate")) ?? templates[0];
   /** @type {Values} */
@@ -144,6 +144,33 @@ export function createPrintView({ labelSize, onShow, onPreview }) {
 
   return {
     current: design,
+
+    /**
+     * My templates changed: they come before the starters. A template that went away gives way to
+     * the first one.
+     * @param {LabelTemplate[]} saved
+     */
+    setSaved(saved) {
+      templates = [...saved, ...STARTERS];
+      const shown = templates.find(({ id }) => id === template.id);
+      if (shown && shown !== template && !own) {
+        template = shown;
+        showFields();
+        onShow(design());
+      } else if (!shown && !own) {
+        choose(templates[0]);
+      }
+      showTemplates();
+    },
+
+    /**
+     * Picks a template, e.g. one just designed.
+     * @param {LabelTemplate} chosen
+     */
+    choose(chosen) {
+      if (own) return;
+      choose(chosen);
+    },
 
     /**
      * Shows a label from the print list, with its own copy of the template, until `restore`.

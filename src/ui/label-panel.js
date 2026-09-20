@@ -166,12 +166,15 @@ export function createLabelPanel({
     markers.show(selection);
   }
 
-  /** @param {LabelDesign | undefined} design  None while there is no template to fill. */
-  function showLabel(design) {
-    if (state.editing && !design) endEdit("dropped");
+  /**
+   * @param {LabelDesign | undefined} design  None while there is no template to fill.
+   * @param {{ sample?: boolean }} [options]  A template being designed, shown with sample values.
+   */
+  function showLabel(design, options) {
+    if (state.editing && (!design || options?.sample)) endEdit("dropped");
     state.source = "label";
     if (design) {
-      label.show(design);
+      label.show(design, options);
       return;
     }
     label.clear();

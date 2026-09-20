@@ -1,6 +1,9 @@
 /** @import { Token } from "./designs.js" */
+/** @import { LabelTemplate } from "./labels/template.js" */
 
+/** Named before the app was; renaming it would lose what people saved. */
 const DATABASE = "mtg-thermal-printer";
+const VERSION = 2;
 
 /** @type {Promise<IDBDatabase> | undefined} */
 let opening;
@@ -10,10 +13,12 @@ const bitmaps = new Map();
 
 function database() {
   opening ??= new Promise((resolve, reject) => {
-    const request = indexedDB.open(DATABASE, 1);
+    const request = indexedDB.open(DATABASE, VERSION);
     request.onupgradeneeded = () => {
-      request.result.createObjectStore("tokens", { keyPath: "id" });
-      request.result.createObjectStore("images");
+      const { objectStoreNames: existing } = request.result;
+      if (!existing.contains("tokens")) request.result.createObjectStore("tokens", { keyPath: "id" });
+      if (!existing.contains("images")) request.result.createObjectStore("images");
+      if (!existing.contains("templates")) request.result.createObjectStore("templates", { keyPath: "id" });
     };
     request.onsuccess = () => resolve(request.result);
     request.onerror = () => reject(request.error);
@@ -26,7 +31,7 @@ function database() {
 
 /**
  * @template T
- * @param {"tokens" | "images"} name
+ * @param {"tokens" | "images" | "templates"} name
  * @param {IDBTransactionMode} mode
  * @param {(store: IDBObjectStore) => IDBRequest<T>} operation
  * @returns {Promise<T>}
@@ -86,6 +91,18 @@ export const tokenStore = {
     bitmaps.delete(id);
     return run("images", "readwrite", (store) => store.delete(id));
   },
+};
+
+/** Label templates of your own, saved in this browser's IndexedDB. */
+export const templateStore = {
+  /** @returns {Promise<LabelTemplate[]>} */
+  list: () => run("templates", "readonly", (store) => store.getAll()),
+
+  /** @param {LabelTemplate} template */
+  save: (template) => run("templates", "readwrite", (store) => store.put(template)),
+
+  /** @param {string} id */
+  delete: (id) => run("templates", "readwrite", (store) => store.delete(id)),
 };
 
 /**

@@ -16,7 +16,7 @@ import { layoutTextCard, renderTextCard, textMeasure } from "./imaging/text-card
 import { firstValue } from "./labels/template.js";
 import { allMarkers } from "./markers.js";
 import { cardFaces, cardText, imageUrl } from "./scryfall/client.js";
-import { loadStoredImage } from "./token-store.js";
+import { loadStoredImage } from "./store.js";
 
 /**
  * What a label shows, as plain data: enough to draw it again on any label size, and to save it with

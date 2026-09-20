@@ -181,11 +181,101 @@
         </div>
       </section>
 
+      <fieldset class="modes labels-tabs">
+        <legend class="visually-hidden">Labels</legend>
+        <label><input type="radio" name="mode" value="labels"><span class="tab">Print</span></label>
+        <label><input type="radio" name="mode" value="templates"><span class="tab">Templates</span></label>
+      </fieldset>
+
       <section class="labels" aria-label="Print a label">
         <h2 class="section-title">Template</h2>
         <ul id="template-list" class="template-list"></ul>
         <form id="label-fields" class="form-grid label-fields" novalidate></form>
         <button id="preview-label" class="print preview-button" type="button">Preview and print</button>
+      </section>
+
+      <section class="templates" aria-label="Templates">
+        <div id="template-library" hidden>
+          <div class="section-head">
+            <h2>My templates</h2>
+            <button id="new-template" class="button" type="button">New template</button>
+          </div>
+          <p id="template-library-status" class="library-status" aria-live="polite"></p>
+          <ul id="saved-templates" class="library-list"></ul>
+          <p class="hint">Templates are saved in this browser.</p>
+          <h2 class="section-title starters-title">Starters</h2>
+          <p class="hint">Open one to make your own version of it.</p>
+          <ul id="starter-templates" class="library-list"></ul>
+        </div>
+
+        <div id="template-editor" hidden>
+          <div class="editor-head">
+            <button id="to-templates" class="text-button back-link" type="button">My templates</button>
+            <p id="template-save-state" class="save-state"></p>
+          </div>
+          <form id="template-form" class="form-grid" novalidate>
+            <div class="form-field">
+              <label for="template-name">Name</label>
+              <input id="template-name" name="name" autocomplete="off">
+            </div>
+            <fieldset class="form-field">
+              <legend>Orientation</legend>
+              <div class="segmented">
+                <label><input type="radio" name="orientation" value="landscape" checked><span>Landscape</span></label>
+                <label><input type="radio" name="orientation" value="portrait"><span>Portrait</span></label>
+              </div>
+              <p class="hint">Landscape runs along a continuous roll.</p>
+            </fieldset>
+            <fieldset class="form-field">
+              <legend>Border</legend>
+              <div class="segmented">
+                <label><input type="radio" name="border" value="none" checked><span>None</span></label>
+                <label><input type="radio" name="border" value="thin"><span>Thin</span></label>
+                <label><input type="radio" name="border" value="thick"><span>Thick</span></label>
+                <label><input type="radio" name="border" value="rounded"><span>Rounded</span></label>
+              </div>
+            </fieldset>
+            <fieldset class="form-field">
+              <legend>Margins</legend>
+              <div class="segmented">
+                <label><input type="radio" name="margin" value="s"><span>Small</span></label>
+                <label><input type="radio" name="margin" value="m" checked><span>Medium</span></label>
+                <label><input type="radio" name="margin" value="l"><span>Large</span></label>
+              </div>
+            </fieldset>
+            <fieldset id="length-field" class="form-field">
+              <legend>Length on a continuous roll</legend>
+              <div class="segmented">
+                <label><input type="radio" name="length" value="auto" checked><span>As long as the content</span></label>
+                <label><input type="radio" name="length" value="fixed"><span>Fixed</span></label>
+              </div>
+              <div class="length-input">
+                <input id="template-length-mm" name="lengthMm" type="number" inputmode="numeric" min="12" max="300" step="1" aria-label="Length in millimetres" disabled>
+                <span>mm</span>
+              </div>
+            </fieldset>
+            <fieldset class="form-field rows-field">
+              <legend>Rows</legend>
+              <p class="hint">Write what changes from label to label in braces, like {Product}. It becomes a field to fill in.</p>
+              <div id="template-rows" class="template-rows"></div>
+              <div id="add-row" class="add-row"><span class="add-label">Add a row with:</span></div>
+            </fieldset>
+            <p id="template-status" class="token-status" aria-live="polite"></p>
+            <button id="preview-template" class="print preview-button" type="button">Preview</button>
+            <div class="token-footer">
+              <div id="template-actions" class="editor-actions">
+                <button id="print-template" class="button small" type="button">Fill in and print</button>
+                <button id="duplicate-template" class="button small" type="button">Duplicate</button>
+                <button id="delete-template" class="button small" type="button">Delete</button>
+              </div>
+              <div id="template-delete-confirm" class="editor-actions" hidden>
+                <span id="template-delete-question"></span>
+                <button id="confirm-delete-template" class="button small" type="button">Delete</button>
+                <button id="cancel-delete-template" class="button small" type="button">Keep</button>
+              </div>
+            </div>
+          </form>
+        </div>
       </section>
 
       <section class="deck" aria-label="Deck">

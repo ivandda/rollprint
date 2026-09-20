@@ -9,6 +9,7 @@ import { element } from "./ui/dom.js";
 import { createLabelPanel } from "./ui/label-panel.js";
 import { LabelSize } from "./ui/label-size.js";
 import { createPrintView } from "./ui/labels/print-view.js";
+import { createTemplatesView } from "./ui/labels/templates-view.js";
 import { createMarkersPicker } from "./ui/markers-picker.js";
 import { createModes } from "./ui/modes.js";
 import { createPrintListDialog } from "./ui/print-list-dialog.js";
@@ -85,10 +86,23 @@ const labels = createPrintView({
   },
   onPreview: views.openLabel,
 });
+const templates = createTemplatesView({
+  labelSize,
+  onShow(design) {
+    if (document.body.dataset.mode === "templates") panel.showLabel(design, { sample: true });
+  },
+  onSaved: (saved) => labels.setSaved(saved),
+  onPrint(template) {
+    modes.show("labels");
+    labels.choose(template);
+  },
+  onPreview: views.openLabel,
+});
 const modes = createModes((mode) => {
   if (mode === "create") panel.showToken(tokens.current());
   else if (mode === "markers") panel.showMarkers(markers.current());
   else if (mode === "labels") panel.showLabel(labels.current());
+  else if (mode === "templates") panel.showLabel(templates.current(), { sample: true });
   else panel.showCards();
 });
 const search = createSearch({
