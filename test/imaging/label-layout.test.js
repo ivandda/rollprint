@@ -116,6 +116,35 @@ test("text wraps to the block's width", () => {
   assert.ok((narrow.blocks[0].text?.lines.length ?? 0) > 1);
 });
 
+test("a word wider than its block is broken where it reaches the edge", () => {
+  const word = "abcdefghijklmnopqrstuvwxyz";
+  const t = template({ rows: [{ blocks: [textBlock({ text: `${word} end`, size: "m" })] }] });
+  const layout = layoutLabel(t, {}, { width: 200, height: 0 }, DPMM, measure);
+  const { lines, size } = layout.blocks[0].text ?? { lines: [], size: 0 };
+  const width = 200 - 2 * Math.round(MARGINS.m * DPMM);
+  assert.ok(lines.length > 2);
+  for (const line of lines) assert.ok(measure(line, size, false) <= width, line);
+  assert.equal(lines.join("").replace(" ", ""), `${word}end`);
+});
+
+test("text on a label as long as its content wraps and shrinks to the longest label a roll allows", () => {
+  const longest = Math.round(AUTO_LENGTH_MM.max * DPMM);
+  const inset = Math.round(MARGINS.m * DPMM);
+  const wide = template({ rows: [{ blocks: [textBlock({ text: "word ".repeat(200), size: "m" })] }] });
+  const across = layoutLabel(wide, {}, { width: 0, height: 696 }, DPMM, measure);
+  const { lines, size } = across.blocks[0].text ?? { lines: [], size: 0 };
+  // The lines wrap just short of the limit, so the label is as long as they are.
+  assert.ok(across.width <= longest && across.width > longest * 0.9, String(across.width));
+  assert.ok(lines.length > 1);
+  for (const line of lines) assert.ok(measure(line, size, false) <= longest - 2 * inset);
+  const tall = template({ rows: [{ blocks: [textBlock({ text: "line\n".repeat(40), size: "xl" })] }] });
+  const along = layoutLabel(tall, {}, { width: 696, height: 0 }, DPMM, measure);
+  const [block] = along.blocks;
+  assert.equal(along.height, longest);
+  assert.ok(block.y + block.height <= longest - inset + 1);
+  assert.ok((block.text?.size ?? 0) < TEXT_SIZES.xl.mm * DPMM);
+});
+
 test("Fit text fills the width when the length is free, and the room left when it is fixed", () => {
   const t = template({ margin: "s", rows: [{ blocks: [textBlock({ text: "Hello", size: "fit" })] }] });
   const free = layoutLabel(t, {}, { width: 500, height: 0 }, DPMM, measure);
@@ -164,10 +193,10 @@ test("a label as wide as its content keeps within the same limits", () => {
     Math.round(AUTO_LENGTH_MM.min * DPMM),
   );
   const long = template({ rows: [{ blocks: [textBlock({ text: "word ".repeat(200), size: "xl" })] }] });
-  assert.equal(
-    layoutLabel(long, {}, { width: 0, height: 696 }, DPMM, measure).width,
-    Math.round(AUTO_LENGTH_MM.max * DPMM),
-  );
+  const longest = Math.round(AUTO_LENGTH_MM.max * DPMM);
+  const { width } = layoutLabel(long, {}, { width: 0, height: 696 }, DPMM, measure);
+  // The words wrap just short of the limit, so the label is as long as the lines are.
+  assert.ok(width <= longest && width > longest * 0.9, String(width));
 });
 
 test("a label as wide as its content gets the widest row, and other rows stretch to it", () => {
