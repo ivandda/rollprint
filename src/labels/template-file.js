@@ -1,9 +1,9 @@
 /** @import { BackupImage } from "../backup.js" */
 /** @import { FontName } from "../imaging/fonts.js" */
-/** @import { Block, LabelTemplate, Row } from "./template.js" */
+/** @import { Cell, LabelTemplate, Part } from "./template.js" */
 import { fromBase64, toBase64 } from "../backup.js";
 import { FONTS } from "../imaging/fonts.js";
-import { BARCODE_HEIGHTS, IMAGE_WIDTHS, TEXT_SIZES, TURNS } from "./template.js";
+import { BARCODE_HEIGHTS, TEXT_SIZES, TURNS, upgradeTemplate } from "./template.js";
 
 /**
  * A template as a file, with its images, so it can be handed to someone else or kept; and as a
@@ -11,7 +11,8 @@ import { BARCODE_HEIGHTS, IMAGE_WIDTHS, TEXT_SIZES, TURNS } from "./template.js"
  */
 
 const FORMAT = "rollprint/template";
-const VERSION = 1;
+/** Version 1 had rows of blocks; version 2 has cells. */
+const VERSION = 2;
 const NOT_A_TEMPLATE = "This file isn't a label template. Choose a file made with Export.";
 export const LINK_PARAM = "template";
 
@@ -44,7 +45,7 @@ export function readTemplateFile(text) {
   if (file.version > VERSION) {
     throw new Error("This template was made by a newer version of this page. Reload the page and try again.");
   }
-  const template = templateOf(file.template);
+  const template = templateOf(file.version < VERSION ? upgradeTemplate(file.template) : file.template);
   if (!template) throw new Error(NOT_A_TEMPLATE);
   /** @type {Map<string, BackupImage>} */
   const images = new Map();
@@ -54,7 +55,7 @@ export function readTemplateFile(text) {
     try {
       images.set(id, { type: image.type, bytes: fromBase64(image.data) });
     } catch {
-      // A damaged image is left out; its block comes back empty.
+      // A damaged image is left out; its cell comes back empty.
     }
   }
   return { template, images };
@@ -94,10 +95,10 @@ export function readTemplateLink(value) {
  * @returns {LabelTemplate | undefined}
  */
 export function templateOf(value) {
-  if (!isRecord(value) || typeof value.id !== "string" || !Array.isArray(value.rows)) return undefined;
-  const rows = value.rows.map(rowOf).filter((row) => row !== undefined);
+  if (!isRecord(value) || typeof value.id !== "string" || !isRecord(value.cell)) return undefined;
   const lengthMm = Number(value.lengthMm);
   const font = oneOf(value.font, /** @type {FontName[]} */ (Object.keys(FONTS)), "sans");
+  const lines = /** @type {const} */ (["thin", "thick"]).find((option) => option === value.lines);
   return {
     id: value.id,
     name: typeof value.name === "string" ? value.name : "",
@@ -106,28 +107,37 @@ export function templateOf(value) {
     margin: oneOf(value.margin, ["s", "m", "l"], "m"),
     ...(lengthMm > 0 && { lengthMm }),
     ...(font !== "sans" && { font }),
-    rows,
+    ...(lines && { lines }),
+    cell: cellOf(value.cell),
   };
 }
 
 /**
  * @param {unknown} value
- * @returns {Row | undefined}
+ * @returns {Cell}
  */
-function rowOf(value) {
-  if (!isRecord(value) || !Array.isArray(value.blocks)) return undefined;
-  const blocks = value.blocks.map(blockOf).filter((block) => block !== undefined);
-  return blocks.length > 0 ? { blocks } : undefined;
+function cellOf(value) {
+  if (!isRecord(value)) return {};
+  if (value.split === "across" || value.split === "down") {
+    const share = Number(value.share);
+    return {
+      split: value.split,
+      share: share > 0 && share < 1 ? share : 1 / 2,
+      first: cellOf(value.first),
+      second: cellOf(value.second),
+    };
+  }
+  const part = partOf(value.part);
+  return part ? { part } : {};
 }
 
 /**
  * @param {unknown} value
- * @returns {Block | undefined}
+ * @returns {Part | undefined}
  */
-function blockOf(value) {
+function partOf(value) {
   if (!isRecord(value)) return undefined;
   const sizes = /** @type {(keyof typeof TEXT_SIZES)[]} */ (Object.keys(TEXT_SIZES));
-  const widths = /** @type {(keyof typeof IMAGE_WIDTHS)[]} */ (Object.keys(IMAGE_WIDTHS));
   switch (value.type) {
     case "text":
       return {
@@ -139,10 +149,6 @@ function blockOf(value) {
         align: oneOf(value.align, ["start", "center", "end"], "start"),
         bold: value.bold === true,
       };
-    case "divider":
-      return { type: "divider", weight: oneOf(value.weight, ["thin", "thick"], "thin") };
-    case "space":
-      return { type: "space", size: oneOf(value.size, ["s", "m", "l"], "m") };
     case "image": {
       const image = value.image;
       const stored =
@@ -153,14 +159,13 @@ function blockOf(value) {
       return {
         type: "image",
         ...(stored && { image: stored }),
-        width: oneOf(value.width, widths, "third"),
         treatment: oneOf(value.treatment, ["logo", "photo"], "logo"),
         show: oneOf(value.show, ["fit", "fill"], "fit"),
         ...(turn !== "none" && { turn }),
       };
     }
     case "qr":
-      return { type: "qr", content: text(value.content), width: oneOf(value.width, widths, "third") };
+      return { type: "qr", content: text(value.content) };
     case "barcode":
       return {
         type: "barcode",

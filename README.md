@@ -8,14 +8,14 @@ Print on a thermal label printer straight from the browser over [WebUSB](https:/
 
 **Print.** Pick a template, fill in its fields, print. Starters cover the usual labels: Text, Product, Address, Name tag, Shelf, QR link, Inventory, Date. What you typed is remembered per template. To print many at once, paste a list with one label per line (tabs or commas between fields, an optional first line naming them): the whole list is one print list item with a page per line.
 
-**Templates.** Design your own in the Templates tab. A template is rows of blocks, up to three side by side:
+**Templates.** Design your own in the Templates tab, in two steps. First the layout: the label is a map of numbered cells, and any cell can be split in two, side by side or one above the other, at a third, a half or two thirds. Then each cell: pick its number on the map and say what it holds.
 
-- **Text**, with an optional heading, in named sizes (Tiny to Huge, or Fit), aligned and bold as you like.
-- **Image**: a logo, printed crisp, or a photo, dithered; a quarter, a third, half or all of the label wide.
+- **Text**, with an optional heading, in named sizes (Tiny to Huge, or Fit, as large as the cell allows), aligned and bold as you like.
+- **Image**: a logo, printed crisp, or a photo, dithered; whole in its cell or filling it, turned if need be.
 - **QR code** of a link or any text, and **barcode** (Code 128) with its text under it, both scaled to whole dots so they scan.
-- **Divider** and **space**.
+- Nothing: an empty cell is spacing. Lines can be drawn between the cells.
 
-Anything written in braces, like `{Product}`, becomes a field to fill in. A template also chooses a typeface (Sans, Serif, Mono or Condensed, all bundled so it prints the same everywhere), a border, margins, an orientation and, on a continuous roll, a fixed length or the content's. Templates re-flow to whatever paper is loaded: die-cut labels, continuous rolls and round labels. Landscape reads along the label's longer side; Fit text takes the room the other rows leave.
+Anything written in braces, like `{Product}`, becomes a field to fill in. A template also chooses a typeface (Sans, Serif, Mono or Condensed, all bundled so it prints the same everywhere), a border, margins, an orientation and, on a continuous roll, a fixed length or the content's. Templates re-flow to whatever paper is loaded: die-cut labels, continuous rolls and round labels. Landscape reads along the label's longer side; a label as long as its content grows until every cell fits what it holds.
 
 **Sharing.** Export a template with its images as a file and import it in another browser, or copy a link for a template without images. That is how a shop hands its product label to everyone who prints: design it once, export it, and each computer imports the file and fills in the fields. Templates and their images are saved in the browser and never leave it.
 
@@ -69,7 +69,7 @@ python3 -m http.server 8000
 
 Pushes to `main` run the checks and deploy to GitHub Pages.
 
-**Layout:** `src/labels/` holds templates as data (blocks, placeholders, starters, files and links, lists); `src/imaging/label-layout.js` lays a template out (pure, tested with a fake text measure) and `label-render.js` draws it; `src/ui/labels/` is the Print tab and the designer. Cards live in `src/scryfall/`, `src/imaging/text-card.js` and the rest of `src/ui/`. Whatever is printed is a *design*, plain data in `src/designs.js` that the print list saves and redraws for the loaded paper; `src/ui/panel/` has one *source* per kind of design behind the shared label panel.
+**Layout:** `src/labels/` holds templates as data (cells and parts, placeholders, starters, files and links, lists); `src/imaging/label-layout.js` lays a template out (pure, tested with a fake text measure) and `label-render.js` draws it; `src/ui/labels/` is the Print tab and the designer. Cards live in `src/scryfall/`, `src/imaging/text-card.js` and the rest of `src/ui/`. Whatever is printed is a *design*, plain data in `src/designs.js` that the print list saves and redraws for the loaded paper; `src/ui/panel/` has one *source* per kind of design behind the shared label panel.
 
 **Adding a printer:** `src/transport/` moves bytes (WebUSB), and `src/printers/` has one driver per printer family. Implement `PrinterDriver` from `src/printers/types.js` and register it in `src/printers/index.js`. The Brother QL tests compare against output from brother_ql (`test/fixtures/brother-ql/generate.py`).
 

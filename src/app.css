@@ -1071,26 +1071,108 @@ select:disabled {
   font-size: 1rem;
 }
 
-.parts {
-  display: grid;
-  gap: 0.75rem;
+.section-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem 1rem;
 }
 
-.parts:empty {
-  display: none;
+/* The map: the label's cells in its proportions, the way it reads, numbered. */
+.cell-map {
+  --map-height: 12rem;
+  display: flex;
+  width: min(100%, calc(var(--map-height) * var(--map-aspect, 2)));
+  aspect-ratio: var(--map-aspect, 2);
+  padding: 0.375rem;
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  background: var(--paper);
 }
 
-/* Parts that print side by side are bracketed together. */
-.part-row {
+.cell-map > * {
+  flex: 1;
+}
+
+.cell-split {
+  display: flex;
+  gap: 0.25rem;
+  min-width: 0;
+  min-height: 0;
+}
+
+.cell-split.across {
+  flex-direction: row;
+}
+
+.cell-split.down {
+  flex-direction: column;
+}
+
+.cell {
   display: grid;
+  align-content: center;
+  min-width: 0;
+  min-height: 0;
+  padding: 0.125rem;
+  overflow: hidden;
+  border: 1px dashed var(--muted);
+  border-radius: 3px;
+  background: none;
+  color: var(--text);
+  text-align: center;
+  cursor: pointer;
+}
+
+.cell[aria-pressed="true"] {
+  border: 2px solid var(--text);
+  background: var(--surface);
+}
+
+.cell-number {
+  font-weight: 700;
+}
+
+.cell-holds {
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 0.75rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* A small cell shows only its number. */
+.cell {
+  container-type: size;
+}
+
+@container (max-height: 3rem) {
+  .cell-holds {
+    display: none;
+  }
+}
+
+.layout-tools {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
   gap: 0.5rem;
 }
 
-.part-row:has(> :nth-child(2)) {
-  padding-inline-start: 0.75rem;
-  border-inline-start: 3px solid var(--text);
+.share-field {
+  flex: 0 1 11rem;
+  margin: 0;
+  padding: 0;
+  border: 0;
 }
 
+.share-field .segmented {
+  --control-height: 2.25rem;
+  --control-padding: 0.3125rem;
+}
+
+/* The chosen cell's settings. */
 .part {
   display: grid;
   gap: 0.625rem;
@@ -1100,18 +1182,8 @@ select:disabled {
   background: var(--surface);
 }
 
-.part-head {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0.25rem 0.5rem;
-  font-size: 0.875rem;
-}
-
-.part-kind {
-  margin-right: auto;
-  font-size: 1rem;
-  font-weight: 700;
+.part[hidden] {
+  display: none;
 }
 
 .tool {
@@ -1218,13 +1290,6 @@ select:disabled {
   object-fit: contain;
   border-radius: 2px;
   background: var(--paper);
-}
-
-.add-part {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0.5rem;
 }
 
 .add-label {
