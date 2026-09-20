@@ -279,6 +279,17 @@ test("a tall image is capped at the label's height, and shares the height on a l
   assert.equal(wide.blocks[0].width, Math.round(across / 2));
 });
 
+test("an image turned a quarter is as tall as it was wide", () => {
+  const image = { id: "i", width: 20, height: 10 };
+  const flat = template({ rows: [{ blocks: [imageBlock({ image, width: "half" })] }] });
+  const turned = template({ rows: [{ blocks: [imageBlock({ image, width: "half", turn: "left" })] }] });
+  const [wide] = layoutLabel(flat, {}, { width: 696, height: 0 }, DPMM, measure).blocks;
+  const [tall] = layoutLabel(turned, {}, { width: 696, height: 0 }, DPMM, measure).blocks;
+  assert.equal(wide.width, tall.width);
+  assert.ok(Math.abs(wide.height - wide.width / 2) <= 1);
+  assert.ok(Math.abs(tall.height - tall.width * 2) <= 1);
+});
+
 test("a QR code is a square share of the width, and nothing while its content is empty", () => {
   const t = template({
     margin: "s",

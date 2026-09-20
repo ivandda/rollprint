@@ -3,7 +3,7 @@
 /** @import { Block, LabelTemplate, Row } from "./template.js" */
 import { fromBase64, toBase64 } from "../backup.js";
 import { FONTS } from "../imaging/fonts.js";
-import { BARCODE_HEIGHTS, IMAGE_WIDTHS, TEXT_SIZES } from "./template.js";
+import { BARCODE_HEIGHTS, IMAGE_WIDTHS, TEXT_SIZES, TURNS } from "./template.js";
 
 /**
  * A template as a file, with its images, so it can be handed to someone else or kept; and as a
@@ -149,12 +149,14 @@ function blockOf(value) {
         isRecord(image) && typeof image.id === "string" && Number(image.width) > 0 && Number(image.height) > 0
           ? { id: image.id, width: Number(image.width), height: Number(image.height) }
           : undefined;
+      const turn = oneOf(value.turn, /** @type {(keyof typeof TURNS)[]} */ (Object.keys(TURNS)), "none");
       return {
         type: "image",
         ...(stored && { image: stored }),
         width: oneOf(value.width, widths, "third"),
         treatment: oneOf(value.treatment, ["logo", "photo"], "logo"),
         show: oneOf(value.show, ["fit", "fill"], "fit"),
+        ...(turn !== "none" && { turn }),
       };
     }
     case "qr":

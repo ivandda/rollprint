@@ -81,6 +81,18 @@ test("unexpected values are dropped or given defaults", () => {
   assert.equal(templateOf(null), undefined);
 });
 
+test("an image keeps its turn, and an unknown turn is upright", () => {
+  /** @param {unknown} turn */
+  const read = (turn) => {
+    const template = templateOf({ id: "x", rows: [{ blocks: [{ type: "image", turn }] }] });
+    const [block] = template?.rows[0].blocks ?? [];
+    return block?.type === "image" ? block.turn : "not an image";
+  };
+  assert.equal(read("half"), "half");
+  assert.equal(read("sideways"), undefined);
+  assert.equal(read(undefined), undefined);
+});
+
 test("every starter survives the round trip through a link", () => {
   for (const starter of STARTERS) {
     const url = new URL(templateLink(starter, PAGE));

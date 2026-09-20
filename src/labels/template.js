@@ -44,6 +44,14 @@ export const IMAGE_WIDTHS = /** @type {const} */ ({
  * @typedef {{ id: string, width: number, height: number }} StoredImage
  */
 
+/** How an image is turned: upright, a quarter turn either way, or a half turn. */
+export const TURNS = /** @type {const} */ ({
+  none: { name: "Upright", radians: 0 },
+  left: { name: "A quarter left", radians: -Math.PI / 2 },
+  half: { name: "Upside down", radians: Math.PI },
+  right: { name: "A quarter right", radians: Math.PI / 2 },
+});
+
 /**
  * A picture: a logo, printed crisp, or a photo, dithered. Without an image yet it takes no room.
  * @typedef {object} ImageBlock
@@ -52,7 +60,11 @@ export const IMAGE_WIDTHS = /** @type {const} */ ({
  * @property {keyof typeof IMAGE_WIDTHS} width
  * @property {"logo" | "photo"} treatment
  * @property {"fit" | "fill"} show  The whole image inside its box, or the box filled and the image cropped.
+ * @property {keyof typeof TURNS} [turn]  Upright when missing.
  */
+
+/** Whether an image is turned a quarter, so its sides swap. @param {ImageBlock} block */
+export const isQuarterTurned = (block) => block.turn === "left" || block.turn === "right";
 
 /**
  * A QR code of some text, which can hold placeholders, e.g. a link for each product.

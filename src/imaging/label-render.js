@@ -3,7 +3,7 @@
 /** @import { FontName } from "./fonts.js" */
 /** @import { LabelLayout, MeasureText, PlacedBlock } from "./label-layout.js" */
 
-import { BARCODE_HEIGHTS } from "../labels/template.js";
+import { BARCODE_HEIGHTS, isQuarterTurned, TURNS } from "../labels/template.js";
 import { QrCode } from "../vendor/qrcodegen.js";
 import { placeImage } from "./arrangement.js";
 import { barcodeModules, QUIET_ZONE } from "./barcode.js";
@@ -190,8 +190,8 @@ function drawBarcode(context, placed, barHeight) {
 }
 
 /**
- * An image in its box: the whole of it, or the box filled and the image cropped in the middle. A
- * logo is thresholded so its lines stay crisp; a photo is dithered.
+ * An image in its box, turned as its block asks: the whole of it, or the box filled and the image
+ * cropped in the middle. A logo is thresholded so its lines stay crisp; a photo is dithered.
  * @param {ImageBitmap} image
  * @param {PlacedBlock} box
  * @param {import("../labels/template.js").ImageBlock} block
@@ -201,7 +201,12 @@ function renderImage(image, box, block, tone) {
   const context = canvasContext(box.width, box.height);
   context.fillStyle = "white";
   context.fillRect(0, 0, box.width, box.height);
-  const place = placeImage(image, box, { fit: block.show, zoom: 1, x: 0.5, y: 0.5 });
+  // The image is placed in the box as it will be once turned, then drawn turned about the middle.
+  const inner = isQuarterTurned(block) ? { width: box.height, height: box.width } : box;
+  const place = placeImage(image, inner, { fit: block.show, zoom: 1, x: 0.5, y: 0.5 });
+  context.translate(box.width / 2, box.height / 2);
+  context.rotate(TURNS[block.turn ?? "none"].radians);
+  context.translate(-inner.width / 2, -inner.height / 2);
   context.imageSmoothingQuality = "high";
   context.drawImage(image, place.x, place.y, place.width, place.height);
   const pixels = context.getImageData(0, 0, box.width, box.height);
