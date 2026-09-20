@@ -6,16 +6,25 @@ import { firstValue, isBlank } from "../../labels/template.js";
  * A template of your own on the label, filled in.
  * @param {object} options
  * @param {PanelHooks} options.panel
- * @returns {Source<LabelDesign> & { show: (design: LabelDesign) => void, clear: () => void }}
+ * @returns {Source<LabelDesign> & {
+ *   show: (design: LabelDesign, options?: { sample?: boolean }) => void,
+ *   clear: () => void,
+ * }}
  */
 export function createLabelSource({ panel }) {
   /** @type {LabelDesign | undefined} */
   let design;
+  /** The template is shown with sample values, while it is designed; that is not for printing. */
+  let sample = false;
 
-  /** @param {LabelDesign} next */
-  function show(next) {
+  /**
+   * @param {LabelDesign} next
+   * @param {{ sample?: boolean }} [options]
+   */
+  function show(next, { sample: isSample = false } = {}) {
     const same = panel.isActive("label") && design?.template.id === next.template.id;
     design = next;
+    sample = isSample;
     panel.refresh({ quiet: same && panel.hasPage() });
   }
 
@@ -37,13 +46,13 @@ export function createLabelSource({ panel }) {
     },
 
     empty() {
-      if (!design) return true;
+      if (!design || sample) return true;
       const { template, rows } = design;
       return rows.length === 0 || rows.every((values) => isBlank(template, values));
     },
     usesDarkness: () => false,
     showOptions() {},
-    load: show,
+    load: (saved) => show(saved),
     options: () => undefined,
     restoreOptions() {},
   };

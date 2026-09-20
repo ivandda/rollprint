@@ -2,13 +2,13 @@ import { addressParam, updateAddress } from "./address.js";
 import { element } from "./dom.js";
 import { readSetting, writeSetting } from "./settings.js";
 
-/** @typedef {"find" | "create" | "markers" | "deck" | "labels"} Mode */
+/** @typedef {"find" | "create" | "markers" | "deck" | "labels" | "templates"} Mode */
 /** @typedef {"cards" | "labels"} Space */
 
 /** The two halves of the app: Magic cards, and labels of your own. Each has its own modes. */
 const SPACES = /** @type {const} */ ({
   cards: { name: "Cards", home: "find", modes: ["find", "create", "markers", "deck"] },
-  labels: { name: "Labels", home: "labels", modes: ["labels"] },
+  labels: { name: "Labels", home: "labels", modes: ["labels", "templates"] },
 });
 
 /** @type {Record<Mode, string>} */
@@ -18,6 +18,7 @@ const BACK_LABELS = {
   markers: "Back to the markers",
   deck: "Back to the deck",
   labels: "Back to the fields",
+  templates: "Back to the template",
 };
 
 /** @param {Mode} mode */

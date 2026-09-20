@@ -8,7 +8,7 @@ import { customKind, isBlankToken, renderDesign } from "../designs.js";
 import { CENTERED } from "../imaging/arrangement.js";
 import { prepareImage } from "../imaging/images.js";
 import { cardText, imageUrl } from "../scryfall/client.js";
-import { tokenStore } from "../token-store.js";
+import { tokenStore } from "../store.js";
 import { addressParam, updateAddress } from "./address.js";
 import { drawBitmap, element, showProblem } from "./dom.js";
 import { toast } from "./toast.js";
