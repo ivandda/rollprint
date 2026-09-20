@@ -2,13 +2,17 @@ import { addressParam, updateAddress } from "./address.js";
 import { dropDown, element } from "./dom.js";
 import { readSetting, writeSetting } from "./settings.js";
 
-/** @typedef {"find" | "create" | "markers" | "deck" | "labels" | "templates"} Mode */
-/** @typedef {"cards" | "labels"} Space */
+/** @typedef {"find" | "create" | "markers" | "deck" | "labels" | "templates" | "books"} Mode */
+/** @typedef {"cards" | "labels" | "books"} Space */
 
-/** The two halves of the app: Magic cards, and labels of your own. Each has its own modes. */
+/**
+ * The three halves of the app: Magic cards, labels of your own, and book covers. Each has its own
+ * modes, and its own name in the header menu.
+ */
 const SPACES = /** @type {const} */ ({
   cards: { name: "Cards", home: "find", modes: ["find", "create", "markers", "deck"] },
   labels: { name: "Labels", home: "labels", modes: ["labels", "templates"] },
+  books: { name: "Books", home: "books", modes: ["books"] },
 });
 
 /** @type {Record<Mode, string>} */
@@ -19,10 +23,19 @@ const BACK_LABELS = {
   deck: "Back to the deck",
   labels: "Back to the fields",
   templates: "Back to the template",
+  books: "Back to the books",
 };
 
 /** @param {Mode} mode */
-const spaceOf = (mode) => (SPACES.labels.modes.some((other) => other === mode) ? "labels" : "cards");
+const spaceOf = (mode) =>
+  /** @type {Space} */ (
+    Object.keys(SPACES).find((space) =>
+      SPACES[/** @type {Space} */ (space)].modes.some((other) => other === mode),
+    ) ?? "cards"
+  );
+
+/** @param {unknown} value @returns {value is Space} */
+const isSpace = (value) => typeof value === "string" && value in SPACES;
 
 /** @param {unknown} value */
 const isMode = (value) => Object.values(SPACES).some(({ modes }) => modes.some((mode) => mode === value));
@@ -54,7 +67,7 @@ export function createModes(onChange) {
       if (option.dataset.space === space) option.setAttribute("aria-current", "true");
       else option.removeAttribute("aria-current");
     }
-    document.title = space === "cards" ? "Rollprint" : "Labels · Rollprint";
+    document.title = space === "cards" ? "Rollprint" : `${SPACES[space].name} · Rollprint`;
     back.textContent = BACK_LABELS[mode];
     writeSetting("space", space);
     rememberMode();
@@ -84,8 +97,10 @@ export function createModes(onChange) {
   addEventListener("popstate", rememberMode);
 
   const linked = addressParam("mode");
+  const remembered = readSetting("space");
   if (isMode(linked)) show(/** @type {Mode} */ (linked));
-  else if (linked === null && readSetting("space") === "labels" && !addressParam("card")) show("labels");
+  else if (linked === null && !addressParam("card") && remembered !== "cards" && isSpace(remembered))
+    show(SPACES[remembered].home);
   else show("find");
 
   return {

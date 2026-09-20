@@ -1,3 +1,4 @@
+/** @import { ShelfBook } from "../books/shelf.js" */
 /** @import { Darkness, Design, LabelDesign, Token } from "../designs.js" */
 /** @import { MarkerSelection } from "../markers.js" */
 /** @import { PrintList, PrintListItem } from "../print-list.js" */
@@ -15,6 +16,7 @@ import { DARKNESS, describeDesign, pageCount, renderDesign, renderPage } from ".
 import { cardSize } from "../imaging/card.js";
 import { clampCopies } from "../print-list.js";
 import { drawBitmap, element, problemMessage, showProblem } from "./dom.js";
+import { createBookSource } from "./panel/book-source.js";
 import { createCardSource } from "./panel/card-source.js";
 import { createLabelSource } from "./panel/label-source.js";
 import { createMarkersSource } from "./panel/markers-source.js";
@@ -118,9 +120,10 @@ export function createLabelPanel({
   });
   const token = createTokenSource({ panel, page: () => state.page, onChange: onTokenChange });
   const markers = createMarkersSource({ panel });
+  const book = createBookSource({ panel });
   const label = createLabelSource({ panel });
   /** @type {Sources} */
-  const sources = { card, token, markers, label };
+  const sources = { card, token, markers, label, book };
   const active = () => sources[state.source];
 
   const darkness = () => /** @type {Darkness} */ (darknessChoice.value || "normal");
@@ -158,6 +161,12 @@ export function createLabelPanel({
     }
     state.source = "token";
     token.show(next);
+  }
+
+  /** @param {ShelfBook[]} shelf */
+  function showBooks(shelf) {
+    state.source = "book";
+    book.show(shelf);
   }
 
   /** @param {MarkerSelection} selection */
@@ -477,6 +486,7 @@ export function createLabelPanel({
     showCard,
     showCards,
     showMarkers,
+    showBooks,
     showToken,
     showLabel,
     editItem,

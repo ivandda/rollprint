@@ -1,12 +1,15 @@
 /** @import { Arrangement } from "./imaging/arrangement.js" */
+/** @import { CoverSize, ShelfBook } from "./books/shelf.js" */
 /** @import { LabelTemplate, Values } from "./labels/template.js" */
 /** @import { Marker } from "./markers.js" */
 /** @import { TextCard } from "./imaging/text-card.js" */
 /** @import { Bitmap, Media } from "./printers/types.js" */
 /** @import { ScryfallCard } from "./scryfall/client.js" */
+import { bookCoverUrl, shelfTotal } from "./books/shelf.js";
 import { CENTERED } from "./imaging/arrangement.js";
 import { canvasContext } from "./imaging/canvas-text.js";
 import { cardSize, renderCard, TONES } from "./imaging/card.js";
+import { layoutCovers, renderCovers } from "./imaging/cover-sheet.js";
 import { foldedPage, foldMargin } from "./imaging/fold.js";
 import { loadFonts } from "./imaging/fonts.js";
 import { loadImage } from "./imaging/images.js";
@@ -22,7 +25,7 @@ import { loadStoredImage } from "./store.js";
 /**
  * What a label shows, as plain data: enough to draw it again on any label size, and to save it with
  * the print list.
- * @typedef {CardDesign | TokenDesign | MarkersDesign | LabelDesign} Design
+ * @typedef {CardDesign | TokenDesign | MarkersDesign | LabelDesign | BookDesign} Design
  */
 
 /**
@@ -74,6 +77,12 @@ export function tokenOf({ id, name, manaCost, typeLine, power, toughness, rules,
  */
 
 /**
+ * Book covers packed onto as few labels as they need, every cover the same size. The shelf is
+ * ordered as it was picked, and each book carries how many of it to print.
+ * @typedef {{ type: "book", shelf: ShelfBook[], size: CoverSize, darkness: Darkness }} BookDesign
+ */
+
+/**
  * A template of your own, filled in: one label for each set of values. The template is kept with
  * the label, so the label stays as it was even if the template changes or goes.
  * `upright` shows it the way it reads instead of as it comes off the roll, for the designer's preview only.
@@ -102,6 +111,11 @@ export async function renderDesign(design, media) {
   if (design.type === "markers") {
     await loadFonts();
     return renderMarkers(design.counts, media, design.custom);
+  }
+  if (design.type === "book") {
+    return renderCovers(design.shelf, design.size, media, await loadCovers(design.shelf), {
+      tone: TONES[design.darkness],
+    });
   }
   if (design.type === "label") {
     const [images] = await Promise.all([
@@ -190,6 +204,9 @@ export function labelLengths(design, media) {
   if (design.type === "markers") {
     return layoutMarkers(design.counts, media, design.custom).map((page) => page.height);
   }
+  if (design.type === "book") {
+    return layoutCovers(design.shelf, design.size, media).map((page) => page.height);
+  }
   if (design.type === "label") {
     return design.rows.map((values) => labelLength(design.template, values, media));
   }
@@ -242,6 +259,18 @@ export async function loadTemplateImages(template) {
   const ids = [...new Set(imageIdsOf(template))];
   const loaded = await Promise.all(ids.map((id) => loadStoredImage(id).catch(() => undefined)));
   return new Map(ids.flatMap((id, i) => (loaded[i] ? [[id, loaded[i]]] : [])));
+}
+
+/**
+ * Every cover a shelf prints, decoded, by the address it came from. Each is downloaded once however
+ * many times it is printed.
+ * @param {ShelfBook[]} shelf
+ * @returns {Promise<Map<string, ImageBitmap>>}
+ */
+export async function loadCovers(shelf) {
+  const urls = [...new Set(shelf.map(bookCoverUrl).filter((url) => url !== undefined))];
+  const loaded = await Promise.all(urls.map((url) => loadImage(url)));
+  return new Map(urls.map((url, index) => [url, loaded[index]]));
 }
 
 /**
@@ -301,6 +330,14 @@ export function describeDesign(design) {
         ? `${chosen.slice(0, 3).join(", ")} and ${chosen.length - 3} more`
         : chosen.join(", ");
     return { name: "Markers", detail };
+  }
+  if (design.type === "book") {
+    const titles = design.shelf.map(({ title, count }) => (count > 1 ? `${title} ×${count}` : title));
+    const detail =
+      titles.length > 3
+        ? `${titles.slice(0, 3).join(", ")} and ${titles.length - 3} more`
+        : titles.join(", ");
+    return { name: shelfTotal(design.shelf) === 1 ? "Book cover" : "Book covers", detail };
   }
   if (design.type === "token") {
     const details = [customKind(design)];
