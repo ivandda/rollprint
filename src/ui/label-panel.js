@@ -226,7 +226,7 @@ export function createLabelPanel({
       ui.status.textContent = "";
       ui.label.dataset.state = "loading";
     }
-    showLabelSize(media);
+    showLabelSize(media, quiet ? state.page : undefined);
     updateButtons();
 
     try {
@@ -253,6 +253,7 @@ export function createLabelPanel({
       if (id !== renderId) return;
       state.page = page;
       drawBitmap(ui.preview, page);
+      showLabelSize(media, page);
       ui.label.dataset.state = "ready";
     } catch (error) {
       if (id !== renderId) return;
@@ -291,12 +292,17 @@ export function createLabelPanel({
   }
 
   /**
-   * Labels the dimension lines and gives the blank label the roll's shape.
+   * Labels the dimension lines and gives the blank label the roll's shape. A label drawn the way it
+   * reads rather than as it comes off the roll has its sides the other way round.
    * @param {Media} media
+   * @param {Bitmap} [page]  The label as drawn, once it is.
    */
-  function showLabelSize(media) {
-    ui.labelWidth.textContent = `${media.widthMm} mm`;
-    ui.labelLength.textContent = media.lengthMm ? `${media.lengthMm} mm` : "continuous";
+  function showLabelSize(media, page) {
+    const turned = page !== undefined && page.width !== media.printableWidth;
+    const width = `${media.widthMm} mm`;
+    const length = media.lengthMm ? `${media.lengthMm} mm` : "continuous";
+    ui.labelWidth.textContent = turned ? length : width;
+    ui.labelLength.textContent = turned ? width : length;
     ui.label.classList.toggle("continuous", !media.lengthMm);
     ui.label.classList.toggle("round", media.shape === "round");
     if (!state.page) {

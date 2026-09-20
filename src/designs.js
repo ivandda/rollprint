@@ -76,7 +76,14 @@ export function tokenOf({ id, name, manaCost, typeLine, power, toughness, rules,
 /**
  * A template of your own, filled in: one label for each set of values. The template is kept with
  * the label, so the label stays as it was even if the template changes or goes.
- * @typedef {{ type: "label", template: LabelTemplate, rows: Values[], darkness?: Darkness }} LabelDesign
+ * `upright` shows it the way it reads instead of as it comes off the roll, for the designer's preview only.
+ * @typedef {{
+ *   type: "label",
+ *   template: LabelTemplate,
+ *   rows: Values[],
+ *   darkness?: Darkness,
+ *   upright?: boolean,
+ * }} LabelDesign
  */
 
 /** @typedef {keyof typeof TONES} Darkness */
@@ -102,7 +109,10 @@ export async function renderDesign(design, media) {
       loadFonts(design.template.font),
     ]);
     const tone = TONES[design.darkness ?? "normal"];
-    return design.rows.map((values) => renderLabel(design.template, values, media, { images, tone }));
+    const upright = design.upright;
+    return design.rows.map((values) =>
+      renderLabel(design.template, values, media, { images, tone, upright }),
+    );
   }
 
   const tone = TONES[design.darkness];
