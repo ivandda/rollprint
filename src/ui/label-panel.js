@@ -1,4 +1,4 @@
-/** @import { Darkness, Design, Token } from "../designs.js" */
+/** @import { Darkness, Design, LabelDesign, Token } from "../designs.js" */
 /** @import { MarkerSelection } from "../markers.js" */
 /** @import { PrintList, PrintListItem } from "../print-list.js" */
 /** @import { PrinterConnection } from "../printers/connection.js" */
@@ -16,6 +16,7 @@ import { cardSize } from "../imaging/card.js";
 import { clampCopies } from "../print-list.js";
 import { drawBitmap, element, problemMessage, showProblem } from "./dom.js";
 import { createCardSource } from "./panel/card-source.js";
+import { createLabelSource } from "./panel/label-source.js";
 import { createMarkersSource } from "./panel/markers-source.js";
 import { createTokenSource } from "./panel/token-source.js";
 import { preparePrinter } from "./printer-button.js";
@@ -117,8 +118,9 @@ export function createLabelPanel({
   });
   const token = createTokenSource({ panel, page: () => state.page, onChange: onTokenChange });
   const markers = createMarkersSource({ panel });
+  const label = createLabelSource({ panel });
   /** @type {Sources} */
-  const sources = { card, token, markers };
+  const sources = { card, token, markers, label };
   const active = () => sources[state.source];
 
   const darkness = () => /** @type {Darkness} */ (darknessChoice.value || "normal");
@@ -162,6 +164,18 @@ export function createLabelPanel({
   function showMarkers(selection) {
     state.source = "markers";
     markers.show(selection);
+  }
+
+  /** @param {LabelDesign | undefined} design  None while there is no template to fill. */
+  function showLabel(design) {
+    if (state.editing && !design) endEdit("dropped");
+    state.source = "label";
+    if (design) {
+      label.show(design);
+      return;
+    }
+    label.clear();
+    showEmpty();
   }
 
   /** A blank label, before a card is picked or while My cards is shown. */
@@ -444,6 +458,7 @@ export function createLabelPanel({
     showCards,
     showMarkers,
     showToken,
+    showLabel,
     editItem,
 
     /** Leaves a label from the print list as it was, if one is being changed. */

@@ -1,10 +1,17 @@
 # Rollprint
 
-Print on a thermal label printer straight from the browser over [WebUSB](https://developer.mozilla.org/en-US/docs/Web/API/WebUSB_API). No drivers or installs. Today it prints Magic: The Gathering cards and tokens as stickers; a mode for your own labels and templates is next.
+Print on a thermal label printer straight from the browser over [WebUSB](https://developer.mozilla.org/en-US/docs/Web/API/WebUSB_API). No drivers or installs. Two modes, switched from the menu in the header: **Cards** prints Magic: The Gathering cards and tokens as stickers, and **Labels** prints labels of your own from templates.
 
 **[Open the app](https://ivandda.github.io/rollprint/)**
 
-## MTG Thermal Printer
+## Labels
+
+- Pick a template (Text, Address, Name tag, Shelf, Date), fill in its fields and print. What you typed is remembered per template.
+- Templates re-flow to whatever paper is loaded: die-cut labels, continuous rolls (as long as the content needs) and round labels.
+- Landscape templates run along the roll; Fit text takes the room the other rows leave.
+- Labels go in the same print list as cards, with copies, and can be changed from there.
+
+## Cards
 
 - **Search** tokens or any paper card, with [Scryfall syntax](https://scryfall.com/docs/syntax) (`c:g power>=4`). Pick the printing and side, or both sides of a double-faced card to fold, and open the tokens and emblems a card makes.
 - **Preview** the exact black-and-white print, with darkness, paper size and border options.

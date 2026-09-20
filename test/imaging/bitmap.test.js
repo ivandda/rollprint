@@ -1,6 +1,12 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { ditherToBitmap, pasteBitmap, shrinkBitmap, thresholdToBitmap } from "../../src/imaging/bitmap.js";
+import {
+  ditherToBitmap,
+  pasteBitmap,
+  rotateBitmap,
+  shrinkBitmap,
+  thresholdToBitmap,
+} from "../../src/imaging/bitmap.js";
 
 /**
  * A uniform image of one grey level.
@@ -61,4 +67,13 @@ test("a higher threshold turns light grey into ink", () => {
   const grey = { width: 1, height: 1, data: Uint8ClampedArray.of(160, 160, 160, 255) };
   assert.deepEqual([...thresholdToBitmap(grey).pixels], [0]);
   assert.deepEqual([...thresholdToBitmap(grey, 190).pixels], [1]);
+});
+
+test("a quarter turn clockwise sends the top row to the right edge", () => {
+  const bitmap = { width: 3, height: 2, pixels: Uint8Array.from([1, 0, 0, 0, 0, 1]) };
+  const turned = rotateBitmap(bitmap);
+  assert.equal(turned.width, 2);
+  assert.equal(turned.height, 3);
+  // (0,0) was top-left: it is now top-right. (2,1) was bottom-right: it is now bottom-left.
+  assert.deepEqual([...turned.pixels], [0, 1, 0, 0, 1, 0]);
 });

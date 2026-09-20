@@ -1,0 +1,303 @@
+/** @import { Block, LabelTemplate, TextSize, Values } from "../labels/template.js" */
+/** @import { Media } from "../printers/types.js" */
+import { fill, TEXT_SIZES } from "../labels/template.js";
+
+/** Room between the border and the content, in millimetres. */
+export const MARGINS = { s: 1.5, m: 3, l: 5 };
+/** Border thickness in millimetres. */
+export const BORDERS = { none: 0, thin: 0.4, thick: 1.2, rounded: 0.4 };
+const SPACES = { s: 2, m: 4, l: 8 };
+const DIVIDERS = { thin: 0.3, thick: 0.8 };
+/** Room around a divider's line, in millimetres. */
+const DIVIDER_ROOM = 1.5;
+/** Between rows, and between blocks side by side, in millimetres. */
+const ROW_GAP = 1;
+const BLOCK_GAP = 2;
+/** Between a heading and its text, as a fraction of the text's size. */
+const HEADING_GAP = 0.25;
+const LINE_HEIGHT = 1.2;
+/** A label on a continuous roll is never shorter or longer than this, in millimetres. */
+export const AUTO_LENGTH_MM = { min: 12, max: 300 };
+/** Text that doesn't fit its label is shrunk, down to this fraction of its size. */
+const SMALLEST_SCALE = 0.4;
+
+/**
+ * The width of text drawn at a size, in dots. The measuring is passed in, so the layout works
+ * without a canvas.
+ * @typedef {(text: string, size: number, bold: boolean) => number} MeasureText
+ */
+
+/**
+ * The room a label has: its width across the print head, and its height along the roll, in dots.
+ * One of them is 0 when the content decides it, on a continuous roll.
+ * @typedef {{ width: number, height: number }} Frame
+ */
+
+/** @typedef {{ x: number, y: number, width: number, height: number }} Rect */
+
+/** Lines of text at a size, ready to draw. @typedef {{ size: number, lines: string[], bold: boolean }} PlacedText */
+
+/**
+ * A block where it goes. `room` is the width it may take, infinite when the label is as wide as
+ * its content; `width` is what it takes until the rows are laid out, then its share of the row.
+ * @typedef {Rect & { block: Block, room: number, heading?: PlacedText, text?: PlacedText }} PlacedBlock
+ */
+
+/**
+ * @typedef {object} LabelLayout
+ * @property {number} width
+ * @property {number} height
+ * @property {number} dotsPerMm
+ * @property {Rect} [border]  Where the border is drawn, if the template has one.
+ * @property {PlacedBlock[]} blocks
+ */
+
+/**
+ * Where everything goes on a label, in dots. Rows stack from the top and blocks in a row share the
+ * width. Named sizes are what they say; Fit text takes the room left once the other rows have
+ * theirs. When the content is taller than a fixed label, every size shrinks alike until it fits;
+ * when it is shorter, it sits in the middle.
+ * @param {LabelTemplate} template
+ * @param {Values} values
+ * @param {Frame} frame
+ * @param {number} dotsPerMm
+ * @param {MeasureText} measure
+ * @returns {LabelLayout}
+ */
+export function layoutLabel(template, values, frame, dotsPerMm, measure) {
+  const mm = dotsPerMm;
+  const border = BORDERS[template.border] * mm;
+  const inset = Math.round(border + MARGINS[template.margin] * mm);
+  const autoWidth = frame.width === 0;
+  const autoHeight = frame.height === 0;
+
+  /**
+   * Lays the rows out at a scale of the named sizes, returning them and how tall they are.
+   * @param {number} scale
+   */
+  const place = (scale) => {
+    /** @param {TextSize} size */
+    const dots = (size) => TEXT_SIZES[size].mm * mm * scale;
+    const contentWidth = autoWidth ? Number.POSITIVE_INFINITY : frame.width - 2 * inset;
+    const rowGap = ROW_GAP * mm;
+
+    // Every block at its named size; Fit text is measured later, once the room left is known.
+    const rows = template.rows.map(({ blocks }) => {
+      const gaps = (blocks.length - 1) * BLOCK_GAP * mm;
+      const share = autoWidth ? Number.POSITIVE_INFINITY : (contentWidth - gaps) / blocks.length;
+      return blocks.map((block) => placeBlock(block, values, share, dots, measure, mm));
+    });
+    const fixedHeight = rows.reduce((sum, blocks) => sum + rowHeight(blocks), 0) + rowGap * (rows.length - 1);
+
+    if (!autoHeight) {
+      // Fit text gets an equal share of what the other rows leave.
+      const fitRows = rows.filter((blocks) => blocks.some(hasFitText));
+      const room = Math.max(0, frame.height - 2 * inset - fixedHeight);
+      for (const blocks of fitRows) {
+        for (const placed of blocks) fitText(placed, room / fitRows.length, measure, mm);
+      }
+    } else {
+      for (const blocks of rows)
+        for (const placed of blocks) fitText(placed, Number.POSITIVE_INFINITY, measure, mm);
+    }
+
+    // In a label as wide as its content, blocks take the width of the widest row so text aligns.
+    const width = autoWidth
+      ? Math.max(
+          ...rows.map(
+            (blocks) =>
+              blocks.reduce((sum, { width: w }) => sum + w, 0) + (blocks.length - 1) * BLOCK_GAP * mm,
+          ),
+          0,
+        )
+      : contentWidth;
+    let y = 0;
+    for (const blocks of rows) {
+      const height = rowHeight(blocks);
+      const share = (width - (blocks.length - 1) * BLOCK_GAP * mm) / blocks.length;
+      let x = 0;
+      for (const placed of blocks) {
+        placed.x = x;
+        placed.width = share;
+        placed.y = y + (height - placed.height) / 2;
+        x += share + BLOCK_GAP * mm;
+      }
+      y += height + rowGap;
+    }
+    const height = Math.max(0, y - rowGap);
+    return { blocks: rows.flat(), width, height };
+  };
+
+  let scale = 1;
+  let content = place(scale);
+  if (!autoHeight) {
+    const room = frame.height - 2 * inset;
+    // Fit text takes what is left, so only the named sizes can make the content too tall.
+    for (let attempt = 0; attempt < 4 && content.height > room + 0.5; attempt++) {
+      scale = Math.max(SMALLEST_SCALE, (scale * room) / content.height);
+      content = place(scale);
+      if (scale === SMALLEST_SCALE) break;
+    }
+  }
+
+  const width = autoWidth ? Math.round(content.width + 2 * inset) : frame.width;
+  const height = autoHeight
+    ? clamp(
+        Math.round(content.height + 2 * inset),
+        Math.round(AUTO_LENGTH_MM.min * mm),
+        Math.round(AUTO_LENGTH_MM.max * mm),
+      )
+    : frame.height;
+  const left = inset;
+  const top = Math.round(inset + Math.max(0, (height - 2 * inset - content.height) / 2));
+  for (const block of content.blocks) {
+    block.x = Math.round(block.x + left);
+    block.y = Math.round(block.y + top);
+    block.width = Math.round(block.width);
+    block.height = Math.round(block.height);
+  }
+  return {
+    width,
+    height,
+    dotsPerMm,
+    border: border ? { x: 0, y: 0, width, height } : undefined,
+    blocks: content.blocks,
+  };
+}
+
+/**
+ * @param {Block} block
+ * @param {Values} values
+ * @param {number} width  Room across, or infinite when the label is as wide as its content.
+ * @param {(size: TextSize) => number} dots
+ * @param {MeasureText} measure
+ * @param {number} mm
+ * @returns {PlacedBlock}
+ */
+function placeBlock(block, values, width, dots, measure, mm) {
+  const placed = { block, x: 0, y: 0, width: 0, height: 0, room: width };
+  if (block.type === "space") return { ...placed, height: SPACES[block.size] * mm };
+  if (block.type === "divider")
+    return { ...placed, height: (DIVIDERS[block.weight] + 2 * DIVIDER_ROOM) * mm };
+  const heading = fill(block.heading, values).trim();
+  const text = fill(block.text, values).trim();
+  const result = {
+    ...placed,
+    heading: heading ? wrapText(heading, dots(block.headingSize), true, width, measure) : undefined,
+    text: text ? wrapText(text, dots(block.size), block.bold, width, measure) : undefined,
+  };
+  sizeTextBlock(result, measure);
+  return result;
+}
+
+/**
+ * Text broken into lines no wider than `width`; a size of 0 means Fit, measured later.
+ * @param {string} text
+ * @param {number} size
+ * @param {boolean} bold
+ * @param {number} width
+ * @param {MeasureText} measure
+ * @returns {PlacedText}
+ */
+function wrapText(text, size, bold, width, measure) {
+  const paragraphs = text.split("\n").map((line) => line.trim());
+  if (!size || width === Number.POSITIVE_INFINITY) return { size, bold, lines: paragraphs };
+  /** @type {string[]} */
+  const lines = [];
+  for (const paragraph of paragraphs) {
+    const words = paragraph.split(/\s+/).filter(Boolean);
+    if (words.length === 0) {
+      lines.push("");
+      continue;
+    }
+    let line = "";
+    for (const word of words) {
+      const longer = line ? `${line} ${word}` : word;
+      if (line && measure(longer, size, bold) > width) {
+        lines.push(line);
+        line = word;
+      } else {
+        line = longer;
+      }
+    }
+    lines.push(line);
+  }
+  return { size, bold, lines };
+}
+
+/**
+ * Gives Fit text the largest size at which its lines fit the block's width and its share of the
+ * height, then sizes the block.
+ * @param {PlacedBlock} placed
+ * @param {number} room  Height to share with the block's other text, or infinite.
+ * @param {MeasureText} measure
+ * @param {number} mm
+ */
+function fitText(placed, room, measure, mm) {
+  const fitting = [placed.heading, placed.text].filter((part) => part && !part.size);
+  if (fitting.length === 0) return;
+  const fixed = [placed.heading, placed.text].filter((part) => part?.size);
+  const used = fixed.reduce((sum, part) => sum + (part ? part.lines.length * part.size * LINE_HEIGHT : 0), 0);
+  const gap = placed.heading && placed.text ? HEADING_GAP : 0;
+  for (const part of fitting) {
+    if (!part) continue;
+    const widest = Math.max(...part.lines.map((line) => measure(line, 100, part.bold)), 1) / 100;
+    const byWidth = placed.room / widest;
+    const heightLeft = (room - used) / fitting.length;
+    const byHeight = heightLeft / (part.lines.length * LINE_HEIGHT + gap);
+    const largest = Math.max(
+      TEXT_SIZES.xs.mm * mm * 0.5,
+      Math.min(byWidth, byHeight, TEXT_SIZES.xl.mm * mm * 3),
+    );
+    part.size = Math.floor(largest);
+  }
+  sizeTextBlock(placed, measure);
+}
+
+/**
+ * Sizes a text block to its lines: as wide as the widest, as tall as they stack.
+ * @param {PlacedBlock} placed
+ * @param {MeasureText} measure
+ */
+function sizeTextBlock(placed, measure) {
+  const parts = [placed.heading, placed.text].filter((part) => part !== undefined);
+  const sized = parts.filter((part) => part.size > 0);
+  placed.width = Math.max(
+    0,
+    ...sized.flatMap((part) => part.lines.map((line) => measure(line, part.size, part.bold))),
+  );
+  const gap = placed.heading?.size && placed.text?.size ? placed.text.size * HEADING_GAP : 0;
+  placed.height = sized.reduce((sum, part) => sum + part.lines.length * part.size * LINE_HEIGHT, 0) + gap;
+}
+
+/** @param {PlacedBlock[]} blocks */
+const rowHeight = (blocks) => Math.max(0, ...blocks.map(({ height }) => height));
+
+/** @param {PlacedBlock} placed */
+const hasFitText = ({ heading, text }) => Boolean((heading && !heading.size) || (text && !text.size));
+
+/**
+ * @param {number} value
+ * @param {number} min
+ * @param {number} max
+ */
+const clamp = (value, min, max) => Math.min(Math.max(value, min), max);
+
+/**
+ * The frame a template lays out in on a paper: portrait takes the paper as it is; landscape turns
+ * it, so the layout's width runs along the roll. Round labels use the square inside the circle.
+ * @param {LabelTemplate} template
+ * @param {Media} media
+ * @returns {Frame}
+ */
+export function frameOf(template, media) {
+  const dotsPerMm = media.dpi / 25.4;
+  if (media.shape === "round") {
+    const side = Math.floor(media.printableWidth / Math.SQRT2);
+    return { width: side, height: side };
+  }
+  const length = template.lengthMm ? Math.round(template.lengthMm * dotsPerMm) : media.printableHeight;
+  return template.orientation === "landscape"
+    ? { width: length, height: media.printableWidth }
+    : { width: media.printableWidth, height: length };
+}

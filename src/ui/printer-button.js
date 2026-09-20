@@ -60,9 +60,13 @@ export function bindPrinterButton(printer, showMessage) {
    * @param {string} [detail]
    */
   function showText(name, detail) {
+    const shown = Object.assign(document.createElement("span"), {
+      className: "printer-name",
+      textContent: name,
+    });
     const parts = detail
-      ? [name, Object.assign(document.createElement("span"), { className: "detail", textContent: detail })]
-      : [name];
+      ? [shown, Object.assign(document.createElement("span"), { className: "detail", textContent: detail })]
+      : [shown];
     button.replaceChildren(...parts);
     button.title = detail ? `${name}: ${detail}` : name;
   }

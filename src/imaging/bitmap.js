@@ -103,3 +103,17 @@ function paperBrightness({ width, height, data }) {
   }
   return values;
 }
+
+/**
+ * The bitmap turned a quarter turn clockwise, so what ran across it runs along the roll.
+ * @param {Bitmap} bitmap
+ * @returns {Bitmap}
+ */
+export function rotateBitmap({ width, height, pixels }) {
+  const turned = new Uint8Array(width * height);
+  for (let y = 0; y < height; y++) {
+    const column = height - 1 - y;
+    for (let x = 0; x < width; x++) turned[x * height + column] = pixels[y * width + x];
+  }
+  return { width: height, height: width, pixels: turned };
+}
