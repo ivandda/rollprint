@@ -22,7 +22,6 @@ export function createPrintView({ labelSize, onShow, onPreview }) {
   const ui = {
     list: element("#template-list", HTMLUListElement),
     fields: element("#label-fields", HTMLFormElement),
-    fieldTemplate: element("#label-field", HTMLTemplateElement),
     preview: element("#preview-label", HTMLButtonElement),
   };
   /** @type {LabelTemplate[]} */
@@ -111,13 +110,9 @@ export function createPrintView({ labelSize, onShow, onPreview }) {
   function showFields() {
     ui.fields.replaceChildren(
       ...fieldsOf(template).map(({ name, multiline }) => {
-        const field = /** @type {HTMLElement} */ (
-          ui.fieldTemplate.content.firstElementChild?.cloneNode(true)
-        );
-        const label = /** @type {HTMLLabelElement} */ (field.querySelector("label"));
+        const field = Object.assign(document.createElement("div"), { className: "form-field" });
         const id = `label-field-${name.replace(/\W+/g, "-").toLowerCase()}`;
-        label.textContent = name;
-        label.htmlFor = id;
+        const label = Object.assign(document.createElement("label"), { textContent: name, htmlFor: id });
         const input = multiline
           ? Object.assign(document.createElement("textarea"), { rows: 3 })
           : Object.assign(document.createElement("input"), { autocomplete: "off" });
@@ -131,7 +126,7 @@ export function createPrintView({ labelSize, onShow, onPreview }) {
           clearTimeout(timer);
           timer = setTimeout(() => onShow(design()), SHOW_DELAY_MS);
         });
-        field.append(input);
+        field.append(label, input);
         return field;
       }),
     );
