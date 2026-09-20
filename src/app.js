@@ -54,6 +54,7 @@ const panel = createLabelPanel({
     markersBeforeEdit = undefined;
     labels.restore();
     modes.refreshBack();
+    modes.allowSwitching(true);
     if (switchingLabels || result === "dropped") return;
     // Escape ends the edit while the key is still being handled, so the sheet is opened after it.
     // Opening it inside the keypress would let the same Escape close it again.
@@ -144,6 +145,7 @@ const list = createPrintListDialog({
       modes.show("find");
     }
     panel.editItem({ ...item, design });
+    modes.allowSwitching(false);
     // On a narrow screen the label fills it, so Back leaves the label alone and returns to the list.
     back.textContent = "Back to the print list";
     views.openLabel();

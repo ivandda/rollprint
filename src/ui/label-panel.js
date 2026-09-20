@@ -11,7 +11,7 @@
  * @typedef {"saved" | "cancelled" | "gone" | "dropped"} EditResult
  */
 /** @import { LabelSize } from "./label-size.js" */
-import { DARKNESS, describeDesign, pageCount, renderDesign } from "../designs.js";
+import { DARKNESS, describeDesign, pageCount, renderDesign, renderPage } from "../designs.js";
 import { cardSize } from "../imaging/card.js";
 import { clampCopies } from "../print-list.js";
 import { drawBitmap, element, problemMessage, showProblem } from "./dom.js";
@@ -78,8 +78,8 @@ export function createLabelPanel({
   const state = {
     /** What the label is made from. @type {Design["type"]} */
     source: "card",
-    /** Every label the design prints on, and the one shown. @type {Bitmap[]} */
-    pages: [],
+    /** How many labels the design prints on, and which of them is shown. */
+    pageCount: 0,
     pageIndex: 0,
     /** The shown label as it will print. @type {Bitmap | undefined} */
     page: undefined,
@@ -185,7 +185,7 @@ export function createLabelPanel({
   function showEmpty() {
     renderId++;
     state.page = undefined;
-    state.pages = [];
+    state.pageCount = 0;
     ui.label.dataset.state = "empty";
     showPages();
     ui.heading.hidden = true;
@@ -220,7 +220,7 @@ export function createLabelPanel({
     const media = labelSize.current;
     if (!quiet) {
       state.page = undefined;
-      state.pages = [];
+      state.pageCount = 0;
       state.pageIndex = 0;
       showPages();
       ui.status.textContent = "";
@@ -230,32 +230,34 @@ export function createLabelPanel({
     updateButtons();
 
     try {
-      const pages = await renderDesign(current, media);
-      // The design came from this very source, whichever one it is.
-      await /** @type {(design: Design, media: Media) => Promise<void>} */ (source.rendered ?? noop)(
-        current,
-        media,
-      );
-      if (id !== renderId) return;
-      if (pages.length === 0) {
+      const count = pageCount(current, media);
+      if (count === 0) {
         // Nothing to draw yet, e.g. a list of labels with no lines.
         state.page = undefined;
-        state.pages = [];
+        state.pageCount = 0;
         ui.label.dataset.state = "empty";
         showOptions();
         showPages();
         updateButtons();
         return;
       }
-      state.pages = pages;
-      state.pageIndex = Math.min(state.pageIndex, pages.length - 1);
-      state.page = pages[state.pageIndex];
-      drawBitmap(ui.preview, state.page);
+      state.pageCount = count;
+      state.pageIndex = Math.min(state.pageIndex, count - 1);
+      // Only the shown page is drawn here; a long list would take a while. Printing draws them all.
+      const page = await renderPage(current, media, state.pageIndex);
+      // The design came from this very source, whichever one it is.
+      await /** @type {(design: Design, media: Media) => Promise<void>} */ (source.rendered ?? noop)(
+        current,
+        media,
+      );
+      if (id !== renderId) return;
+      state.page = page;
+      drawBitmap(ui.preview, page);
       ui.label.dataset.state = "ready";
     } catch (error) {
       if (id !== renderId) return;
       state.page = undefined;
-      state.pages = [];
+      state.pageCount = 0;
       ui.label.dataset.state = "empty";
       showProblem(ui.status, problemMessage(error));
     }
@@ -266,7 +268,7 @@ export function createLabelPanel({
 
   /** Shows previous and next buttons when the design prints on more than one label. */
   function showPages() {
-    const count = state.pages.length;
+    const count = state.pageCount;
     ui.pages.hidden = count < 2;
     if (count < 2) return;
     const focused = document.activeElement;
@@ -282,11 +284,10 @@ export function createLabelPanel({
   /** @param {number} step */
   function turnPage(step) {
     const index = state.pageIndex + step;
-    if (!state.pages[index]) return;
+    if (index < 0 || index >= state.pageCount) return;
     state.pageIndex = index;
-    state.page = state.pages[index];
-    drawBitmap(ui.preview, state.page);
     showPages();
+    updatePreview(true);
   }
 
   /**

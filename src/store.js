@@ -20,8 +20,20 @@ function database() {
       if (!existing.contains("images")) request.result.createObjectStore("images");
       if (!existing.contains("templates")) request.result.createObjectStore("templates", { keyPath: "id" });
     };
-    request.onsuccess = () => resolve(request.result);
+    request.onsuccess = () => {
+      const db = request.result;
+      // A newer build in another tab wants to upgrade: letting go lets it, and the next call reopens.
+      db.onversionchange = () => {
+        db.close();
+        opening = undefined;
+      };
+      resolve(db);
+    };
     request.onerror = () => reject(request.error);
+    request.onblocked = () =>
+      reject(
+        new Error("Another tab of this page is holding what you saved. Close it, then reload this one."),
+      );
   });
   opening.catch(() => {
     opening = undefined;

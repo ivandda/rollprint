@@ -94,6 +94,15 @@ export function createModes(onChange) {
   return {
     show,
 
+    /**
+     * Whether the other half of the app can be chosen: not while a label from the list is changed,
+     * when the tabs are out of reach too.
+     * @param {boolean} allowed
+     */
+    allowSwitching(allowed) {
+      switcher.disabled = !allowed;
+    },
+
     /** Puts the Back button's label back, after it pointed at the print list. */
     refreshBack() {
       back.textContent = BACK_LABELS[current()];

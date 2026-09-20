@@ -60,6 +60,11 @@ test("landscape reads along the longer side, portrait along the shorter; a roll 
   assert.deepEqual(frameOf(template({}), media("62x100")), { width: 696, height: 1109 });
   // A continuous roll is as long as the content, so landscape runs along it.
   assert.deepEqual(frameOf(template({}), media("62")), { width: 696, height: 0 });
+  // A fixed length keeps within the limits a roll has.
+  assert.deepEqual(frameOf(template({ lengthMm: 3000 }), media("62")), {
+    width: 696,
+    height: Math.round(AUTO_LENGTH_MM.max * DPMM),
+  });
   assert.deepEqual(frameOf(template({ orientation: "landscape" }), media("62")), { width: 0, height: 696 });
   // A fixed 50 mm piece of a 62 mm roll is wider than it is long, like a 62 × 50 label.
   const piece = Math.round(50 * DPMM);

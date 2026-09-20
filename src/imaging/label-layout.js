@@ -363,13 +363,15 @@ const autoLength = (dots, mm) =>
   clamp(Math.round(dots), Math.round(AUTO_LENGTH_MM.min * mm), Math.round(AUTO_LENGTH_MM.max * mm));
 
 /**
- * How long the label is along the roll, in dots: what the template fixes, else what the paper has,
- * which is 0 on a continuous roll.
+ * How long the label is along the roll, in dots: what the template fixes, within the limits a roll
+ * has, else what the paper has, which is 0 on a continuous roll.
  * @param {LabelTemplate} template
  * @param {Media} media
  */
 const lengthOf = (template, media) =>
-  template.lengthMm ? Math.round((template.lengthMm * media.dpi) / 25.4) : media.printableHeight;
+  template.lengthMm
+    ? Math.round((clamp(template.lengthMm, AUTO_LENGTH_MM.min, AUTO_LENGTH_MM.max) * media.dpi) / 25.4)
+    : media.printableHeight;
 
 /**
  * Whether the label is drawn turned a quarter turn, so its lines run along the roll. Landscape
