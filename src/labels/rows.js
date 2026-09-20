@@ -4,7 +4,7 @@
  * Values for many labels from pasted text: one label per line. With several fields, the cells are
  * separated by tabs, or by commas when there are no tabs (quotes protect commas, as in a CSV). A
  * first line made only of field names sets which column is which; otherwise the columns follow
- * the fields' order. Blank lines are skipped.
+ * the fields' order. With one field, a line is the value, commas and all. Blank lines are skipped.
  * @param {string} text
  * @param {Field[]} fields
  * @returns {Values[]}
@@ -12,8 +12,8 @@
 export function parseRows(text, fields) {
   const lines = text.split(/\r?\n/).filter((line) => line.trim() !== "");
   if (lines.length === 0 || fields.length === 0) return [];
-  const separator = text.includes("\t") ? "\t" : ",";
-  const rows = lines.map((line) => splitLine(line, separator));
+  const separator = text.includes("\t") ? "\t" : fields.length > 1 ? "," : undefined;
+  const rows = lines.map((line) => (separator ? splitLine(line, separator) : [line]));
   const names = fields.map(({ name }) => name);
   const lower = names.map((name) => name.toLowerCase());
   const first = rows[0].map((cell) => cell.trim().toLowerCase());

@@ -123,16 +123,26 @@ const STOP = 106;
 export const QUIET_ZONE = 10;
 
 /**
+ * Text as Code 128 carries it: characters outside printable ASCII become "?".
+ * @param {string} text
+ */
+export function code128Text(text) {
+  return [...text]
+    .map((char) => {
+      const code = char.charCodeAt(0);
+      return code >= 32 && code <= 126 ? char : "?";
+    })
+    .join("");
+}
+
+/**
  * The symbol values for text, choosing subset C for runs of four or more digits (two per symbol) and
- * subset B otherwise. Characters outside printable ASCII become "?".
+ * subset B otherwise.
  * @param {string} text
  * @returns {number[]}  Without the checksum and stop.
  */
 export function code128Values(text) {
-  const chars = [...text].map((char) => {
-    const code = char.charCodeAt(0);
-    return code >= 32 && code <= 126 ? char : "?";
-  });
+  const chars = [...code128Text(text)];
   /** @type {number[]} */
   const values = [];
   /** @type {"B" | "C" | undefined} */

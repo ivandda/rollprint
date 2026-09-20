@@ -37,6 +37,16 @@ test("quotes protect commas and doubled quotes are one", () => {
   ]);
 });
 
+test("with one field, a line is the value, commas and all", () => {
+  const [address] = FIELDS;
+  assert.deepEqual(parseRows('12 Main St, Springfield\n"Quoted", too', [address]), [
+    { Product: "12 Main St, Springfield" },
+    { Product: '"Quoted", too' },
+  ]);
+  const text = rowsToText([{ Product: "12 Main St, Springfield" }], [address]);
+  assert.deepEqual(parseRows(text, [address]), [{ Product: "12 Main St, Springfield" }]);
+});
+
 test("extra cells are dropped and missing ones left out", () => {
   assert.deepEqual(parseRows("Honey,5,extra\nJam", FIELDS), [
     { Product: "Honey", Price: "5" },
