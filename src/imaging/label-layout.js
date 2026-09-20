@@ -73,8 +73,8 @@ const BARCODE_TEXT_LINE = 1.4;
  * Where everything goes on a label, in dots. Rows stack from the top; an image takes the share of
  * the width its block asks for and the other blocks in its row split the rest. Named sizes are
  * what they say; Fit text takes the room left once the other rows have theirs. When the content is
- * taller than a fixed label, every size shrinks alike until it fits; when it is shorter, it sits
- * in the middle.
+ * taller than a fixed label, or than the longest label a roll allows, every size shrinks alike
+ * until it fits; when it is shorter, it sits in the middle.
  * @param {LabelTemplate} template
  * @param {Values} values
  * @param {Frame} frame
@@ -88,6 +88,8 @@ export function layoutLabel(template, values, frame, dotsPerMm, measure) {
   const inset = Math.round(border + MARGINS[template.margin] * mm);
   const autoWidth = frame.width === 0;
   const autoHeight = frame.height === 0;
+  /** A label as long as its content never grows past this, so its text wraps and shrinks to it. */
+  const longest = Math.round(AUTO_LENGTH_MM.max * mm);
 
   /**
    * Lays the rows out at a scale of the named sizes, returning them and how tall they are.
@@ -96,7 +98,7 @@ export function layoutLabel(template, values, frame, dotsPerMm, measure) {
   const place = (scale) => {
     /** @param {TextSize} size */
     const dots = (size) => TEXT_SIZES[size].mm * mm * scale;
-    const contentWidth = autoWidth ? Number.POSITIVE_INFINITY : frame.width - 2 * inset;
+    const contentWidth = (autoWidth ? longest : frame.width) - 2 * inset;
     const contentHeight = autoHeight ? Number.POSITIVE_INFINITY : frame.height - 2 * inset;
     // Images are a share of the label's width, or of its height when the width is up to the content.
     const imageBasis = autoWidth ? contentHeight : contentWidth;
@@ -108,9 +110,7 @@ export function layoutLabel(template, values, frame, dotsPerMm, measure) {
       const images = blocks.map((block) => imageSize(block, values, imageBasis, contentHeight));
       const imagesWidth = images.reduce((sum, size) => sum + (size?.width ?? 0), 0);
       const flexible = images.filter((size) => !size).length;
-      const share = autoWidth
-        ? Number.POSITIVE_INFINITY
-        : Math.max(0, contentWidth - gaps - imagesWidth) / flexible;
+      const share = Math.max(0, contentWidth - gaps - imagesWidth) / flexible;
       return blocks.map((block, i) => {
         const size = images[i];
         if (size) {
@@ -165,14 +165,12 @@ export function layoutLabel(template, values, frame, dotsPerMm, measure) {
 
   let scale = 1;
   let content = place(scale);
-  if (!autoHeight) {
-    const room = frame.height - 2 * inset;
-    // Fit text takes what is left, so only the named sizes can make the content too tall.
-    for (let attempt = 0; attempt < 4 && content.height > room + 0.5; attempt++) {
-      scale = Math.max(SMALLEST_SCALE, (scale * room) / content.height);
-      content = place(scale);
-      if (scale === SMALLEST_SCALE) break;
-    }
+  // Fit text takes what is left, so only the named sizes can make the content too tall.
+  const room = (autoHeight ? longest : frame.height) - 2 * inset;
+  for (let attempt = 0; attempt < 4 && content.height > room + 0.5; attempt++) {
+    scale = Math.max(SMALLEST_SCALE, (scale * room) / content.height);
+    content = place(scale);
+    if (scale === SMALLEST_SCALE) break;
   }
 
   const width = autoWidth ? autoLength(content.width + 2 * inset, mm) : frame.width;
@@ -262,7 +260,8 @@ function imageSize(block, values, basis, tallest) {
 }
 
 /**
- * Text broken into lines no wider than `width`; a size of 0 means Fit, measured later.
+ * Text broken into lines no wider than `width`, between words where it can and inside a word that
+ * is wider on its own; a size of 0 means Fit, measured later.
  * @param {string} text
  * @param {number} size
  * @param {boolean} bold
@@ -289,6 +288,12 @@ function wrapText(text, size, bold, width, measure) {
         line = word;
       } else {
         line = longer;
+      }
+      while (line.length > 1 && measure(line, size, bold) > width) {
+        let end = line.length - 1;
+        while (end > 1 && measure(line.slice(0, end), size, bold) > width) end--;
+        lines.push(line.slice(0, end));
+        line = line.slice(end);
       }
     }
     lines.push(line);

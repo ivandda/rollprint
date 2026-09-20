@@ -129,6 +129,11 @@ function draw(layout, template) {
     context.stroke();
   }
 
+  // Whatever still doesn't fit is cut at the border rather than drawn over it.
+  const edge = BORDERS[template.border] * mm;
+  context.beginPath();
+  context.rect(edge, edge, width - 2 * edge, height - 2 * edge);
+  context.clip();
   for (const placed of layout.blocks) drawBlock(context, placed, mm, template);
   return thresholdToBitmap(context.getImageData(0, 0, width, height), TEXT_THRESHOLD);
 }
