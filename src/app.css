@@ -648,6 +648,12 @@ select:disabled {
   font-size: 1.125rem;
 }
 
+.section-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
 .library-status {
   margin: 0 0 0.75rem;
 }
@@ -1001,6 +1007,19 @@ select:disabled {
 
 .label-fields:empty {
   display: none;
+}
+
+#label-many {
+  width: 100%;
+  min-height: 10rem;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-size: 0.9375rem;
+  line-height: 1.4;
+  resize: vertical;
 }
 
 /* Templates */

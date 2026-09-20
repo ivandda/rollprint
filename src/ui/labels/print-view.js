@@ -3,6 +3,7 @@
 /** @import { LabelSize } from "../label-size.js" */
 import { loadFonts } from "../../imaging/fonts.js";
 import { renderLabel } from "../../imaging/label-render.js";
+import { parseRows, rowsToText } from "../../labels/rows.js";
 import { STARTERS } from "../../labels/starters.js";
 import { fieldsOf, sampleValues } from "../../labels/template.js";
 import { drawBitmap, element } from "../dom.js";
@@ -22,8 +23,13 @@ export function createPrintView({ labelSize, onShow, onPreview }) {
   const ui = {
     list: element("#template-list", HTMLUListElement),
     fields: element("#label-fields", HTMLFormElement),
+    fillChoice: element("#fill-choice", HTMLElement),
+    manyField: element("#label-many-field", HTMLElement),
+    many: element("#label-many", HTMLTextAreaElement),
+    count: element("#label-count", HTMLElement),
     preview: element("#preview-label", HTMLButtonElement),
   };
+  const fillChoice = [...ui.fillChoice.querySelectorAll("input")];
   /** Templates of your own first, then the starters. @type {LabelTemplate[]} */
   let templates = STARTERS;
   /** @type {LabelTemplate} */
@@ -32,14 +38,21 @@ export function createPrintView({ labelSize, onShow, onPreview }) {
   let values = rememberedValues(template);
   /** @type {ReturnType<typeof setTimeout> | undefined} */
   let timer;
+  /** Many labels from a pasted list, rather than one from the fields. */
+  let many = false;
+  let list = "";
   /**
    * The user's own template and values, put back once a label from the print list is done with.
-   * @type {{ template: LabelTemplate, values: Values } | undefined}
+   * @type {{ template: LabelTemplate, values: Values, many: boolean, list: string } | undefined}
    */
   let own;
 
   /** @returns {LabelDesign} */
-  const design = () => ({ type: "label", template, rows: [values] });
+  const design = () => ({
+    type: "label",
+    template,
+    rows: many ? parseRows(list, fieldsOf(template)) : [values],
+  });
 
   /** @param {LabelTemplate} chosen */
   function rememberedValues(chosen) {
@@ -136,11 +149,44 @@ export function createPrintView({ labelSize, onShow, onPreview }) {
     event.preventDefault();
     onPreview();
   });
+
+  /* Many labels from a list */
+
+  for (const input of fillChoice) {
+    input.addEventListener("change", () => {
+      many = input.value === "many";
+      showMany();
+      onShow(design());
+      const first = many ? ui.many : ui.fields.querySelector("input, textarea");
+      if (first instanceof HTMLElement) first.focus();
+    });
+  }
+
+  ui.many.addEventListener("input", () => {
+    list = ui.many.value;
+    showCount();
+    clearTimeout(timer);
+    timer = setTimeout(() => onShow(design()), SHOW_DELAY_MS);
+  });
+
+  function showMany() {
+    for (const input of fillChoice) input.checked = input.value === (many ? "many" : "one");
+    ui.fields.hidden = many;
+    ui.manyField.hidden = !many;
+    ui.many.value = list;
+    showCount();
+  }
+
+  function showCount() {
+    const count = many ? parseRows(list, fieldsOf(template)).length : 0;
+    ui.count.textContent = count === 0 ? "" : count === 1 ? "1 label" : `${count} labels`;
+  }
   ui.preview.addEventListener("click", onPreview);
   labelSize.addEventListener("change", showTemplates);
 
   showTemplates();
   showFields();
+  showMany();
 
   return {
     current: design,
@@ -177,20 +223,24 @@ export function createPrintView({ labelSize, onShow, onPreview }) {
      * @param {LabelDesign} saved
      */
     edit(saved) {
-      own ??= { template, values };
+      own ??= { template, values, many, list };
       template = saved.template;
+      many = saved.rows.length > 1;
       values = saved.rows[0] ?? {};
+      list = many ? rowsToText(saved.rows, fieldsOf(saved.template)) : "";
       markChosen();
       showFields();
+      showMany();
     },
 
     /** Puts back what the user was filling in before a label from the print list took over. */
     restore() {
       if (!own) return;
-      ({ template, values } = own);
+      ({ template, values, many, list } = own);
       own = undefined;
       markChosen();
       showFields();
+      showMany();
       onShow(design());
     },
   };
