@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { AUTO_LENGTH_MM, frameOf, layoutLabel, MARGINS } from "../../src/imaging/label-layout.js";
-import { TEXT_SIZES, textBlock } from "../../src/labels/template.js";
+import { imageBlock, TEXT_SIZES, textBlock } from "../../src/labels/template.js";
 import { MEDIA } from "../../src/printers/brother-ql/media.js";
 
 const DPMM = 300 / 25.4;
@@ -158,4 +158,49 @@ test("placeholders are filled before measuring, and a border is drawn around the
   const layout = layoutLabel(t, { Name: "Ada" }, { width: 300, height: 100 }, DPMM, measure);
   assert.deepEqual(layout.blocks[0].text?.lines, ["Ada"]);
   assert.deepEqual(layout.border, { x: 0, y: 0, width: 300, height: 100 });
+});
+
+test("an image takes its share of the width, as tall as its proportions, and the text takes the rest", () => {
+  const logo = { id: "img", width: 200, height: 100 };
+  const t = template({
+    margin: "s",
+    rows: [{ blocks: [imageBlock({ image: logo, width: "third" }), textBlock({ text: "Name", size: "m" })] }],
+  });
+  const layout = layoutLabel(t, {}, { width: 900, height: 400 }, DPMM, measure);
+  const [image, text] = layout.blocks;
+  const content = 900 - 2 * Math.round(MARGINS.s * DPMM);
+  assert.equal(image.width, Math.round(content / 3));
+  assert.equal(image.height, Math.round(content / 6));
+  assert.ok(text.x > image.x + image.width);
+  assert.equal(text.x + text.width, Math.round(MARGINS.s * DPMM) + content);
+  // Without an image the block takes no room at all.
+  const empty = layoutLabel(
+    { ...t, rows: [{ blocks: [imageBlock(), textBlock({ text: "Name" })] }] },
+    {},
+    { width: 900, height: 400 },
+    DPMM,
+    measure,
+  );
+  assert.equal(empty.blocks[0].width, 0);
+  assert.equal(empty.blocks[1].width, content - Math.round(2 * DPMM));
+});
+
+test("a tall image is capped at the label's height, and shares the height on a label as wide as its content", () => {
+  const tall = { id: "img", width: 100, height: 400 };
+  const t = template({ margin: "s", rows: [{ blocks: [imageBlock({ image: tall, width: "full" })] }] });
+  const fixed = layoutLabel(t, {}, { width: 600, height: 300 }, DPMM, measure);
+  const room = 300 - 2 * Math.round(MARGINS.s * DPMM);
+  assert.equal(fixed.blocks[0].height, room);
+  assert.equal(fixed.blocks[0].width, Math.round(room / 4));
+  const square = { id: "img", width: 300, height: 300 };
+  const wide = layoutLabel(
+    { ...t, rows: [{ blocks: [imageBlock({ image: square, width: "half" })] }] },
+    {},
+    { width: 0, height: 696 },
+    DPMM,
+    measure,
+  );
+  const across = 696 - 2 * Math.round(MARGINS.s * DPMM);
+  assert.equal(wide.blocks[0].height, Math.round(across / 2));
+  assert.equal(wide.blocks[0].width, Math.round(across / 2));
 });

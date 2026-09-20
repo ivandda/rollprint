@@ -1,12 +1,25 @@
 /** @import { LabelTemplate, Values } from "../labels/template.js" */
 /** @import { Bitmap, Media } from "../printers/types.js" */
 /** @import { LabelLayout, MeasureText, PlacedBlock } from "./label-layout.js" */
-import { pasteBitmap, rotateBitmap, thresholdToBitmap } from "./bitmap.js";
+import { placeImage } from "./arrangement.js";
+import { ditherToBitmap, pasteBitmap, rotateBitmap, thresholdToBitmap } from "./bitmap.js";
 import { canvasContext, font, TEXT_THRESHOLD } from "./canvas-text.js";
+import { TONES } from "./card.js";
 import { BORDERS, frameOf, layoutLabel } from "./label-layout.js";
 
 const DIVIDERS = { thin: 0.3, thick: 0.8 };
 const ROUNDED_RADIUS_MM = 2;
+/** Keeps a logo's anti-aliased edges, so thin lines still print. */
+const LOGO_THRESHOLD = 170;
+
+/**
+ * How a label is drawn beyond its layout.
+ * @typedef {object} RenderOptions
+ * @property {boolean} [upright]  Not turned for landscape, for a small picture of the template.
+ * @property {Map<string, ImageBitmap>} [images]  The template's images, decoded, by ID. A missing
+ *   image leaves its box blank.
+ * @property {{ black: number, white: number, gamma: number }} [tone]  Applied to photos.
+ */
 
 /**
  * Measures text the way the label is drawn.
@@ -45,16 +58,22 @@ export function labelLength(template, values, media) {
 
 /**
  * Draws a filled template on a paper, as it prints: turned for landscape, and in the middle of a
- * round label. `upright` leaves it the way it reads, for a small picture of the template.
+ * round label.
  * @param {LabelTemplate} template
  * @param {Values} values
  * @param {Media} media
- * @param {{ upright?: boolean }} [options]
+ * @param {RenderOptions} [options]
  * @returns {Bitmap}
  */
-export function renderLabel(template, values, media, { upright = false } = {}) {
+export function renderLabel(template, values, media, { upright = false, images, tone = TONES.normal } = {}) {
   const layout = layoutOn(template, values, media);
   const drawn = draw(layout, template);
+  for (const placed of layout.blocks) {
+    const { block } = placed;
+    if (block.type !== "image" || !block.image) continue;
+    const image = images?.get(block.image.id);
+    if (image) pasteBitmap(drawn, renderImage(image, placed, block, tone), placed.x, placed.y);
+  }
   if (upright) return drawn;
   const turned =
     template.orientation === "landscape" && media.shape !== "round" ? rotateBitmap(drawn) : drawn;
@@ -105,13 +124,34 @@ function draw(layout, template) {
 }
 
 /**
+ * An image in its box: the whole of it, or the box filled and the image cropped in the middle. A
+ * logo is thresholded so its lines stay crisp; a photo is dithered.
+ * @param {ImageBitmap} image
+ * @param {PlacedBlock} box
+ * @param {import("../labels/template.js").ImageBlock} block
+ * @param {{ black: number, white: number, gamma: number }} tone
+ */
+function renderImage(image, box, block, tone) {
+  const context = canvasContext(box.width, box.height);
+  context.fillStyle = "white";
+  context.fillRect(0, 0, box.width, box.height);
+  const place = placeImage(image, box, { fit: block.show, zoom: 1, x: 0.5, y: 0.5 });
+  context.imageSmoothingQuality = "high";
+  context.drawImage(image, place.x, place.y, place.width, place.height);
+  const pixels = context.getImageData(0, 0, box.width, box.height);
+  return block.treatment === "photo"
+    ? ditherToBitmap(pixels, tone)
+    : thresholdToBitmap(pixels, LOGO_THRESHOLD);
+}
+
+/**
  * @param {OffscreenCanvasRenderingContext2D} context
  * @param {PlacedBlock} placed
  * @param {number} mm
  */
 function drawBlock(context, placed, mm) {
   const { block } = placed;
-  if (block.type === "space") return;
+  if (block.type === "space" || block.type === "image") return;
   if (block.type === "divider") {
     const thickness = Math.max(1, Math.round(DIVIDERS[block.weight] * mm));
     context.fillRect(

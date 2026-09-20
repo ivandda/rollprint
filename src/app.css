@@ -1129,6 +1129,19 @@ select:disabled {
   gap: 0.5rem;
 }
 
+.block-image {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.625rem;
+  font-size: 0.875rem;
+}
+
+.block-pair:has(> :nth-child(3)) {
+  grid-template-columns: repeat(auto-fit, minmax(7rem, 1fr));
+}
+
 /* Deck */
 
 .deck-form {

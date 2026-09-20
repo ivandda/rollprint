@@ -2,6 +2,12 @@
 /** @import { PanelHooks, Source } from "./source.js" */
 import { firstValue, isBlank } from "../../labels/template.js";
 
+/** Whether the darkness choice changes anything: only photos are dithered. @param {LabelDesign} design */
+const hasPhoto = (design) =>
+  design.template.rows.some(({ blocks }) =>
+    blocks.some((block) => block.type === "image" && block.treatment === "photo" && block.image),
+  );
+
 /**
  * A template of your own on the label, filled in.
  * @param {object} options
@@ -36,7 +42,7 @@ export function createLabelSource({ panel }) {
       design = undefined;
     },
 
-    design: () => design,
+    design: (darkness) => design && { ...design, darkness },
 
     heading() {
       if (!design) return { name: "", detail: "" };
@@ -50,7 +56,7 @@ export function createLabelSource({ panel }) {
       const { template, rows } = design;
       return rows.length === 0 || rows.every((values) => isBlank(template, values));
     },
-    usesDarkness: () => false,
+    usesDarkness: () => Boolean(design && hasPhoto(design)),
     showOptions() {},
     load: (saved) => show(saved),
     options: () => undefined,

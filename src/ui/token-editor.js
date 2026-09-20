@@ -7,8 +7,9 @@ import { cardLink, LINK_PARAM, readCardLink } from "../card-link.js";
 import { customKind, isBlankToken, renderDesign } from "../designs.js";
 import { CENTERED } from "../imaging/arrangement.js";
 import { prepareImage } from "../imaging/images.js";
+import { imageIdsOf } from "../labels/template.js";
 import { cardText, imageUrl } from "../scryfall/client.js";
-import { tokenStore } from "../store.js";
+import { templateStore, tokenStore } from "../store.js";
 import { addressParam, updateAddress } from "./address.js";
 import { drawBitmap, element, showProblem } from "./dom.js";
 import { toast } from "./toast.js";
@@ -178,20 +179,30 @@ export function createTokenEditor({ printList, labelSize, onShow, onPreview }) {
   }
 
   /**
-   * Deletes a saved image once no card and no label in the print list uses it.
+   * Deletes a saved image once no card, template or label in the print list uses it.
    * @param {TokenArt | undefined} art
    */
-  function releaseImage(art) {
+  async function releaseImage(art) {
     const id = storedImageOf(art);
-    if (id && !imagesInUse().has(id)) tokenStore.deleteImage(id).catch(() => {});
+    if (!id) return;
+    const templates = await templateStore.list().catch(() => []);
+    if (!imagesInUse(templates).has(id)) tokenStore.deleteImage(id).catch(() => {});
   }
 
-  function imagesInUse() {
+  /**
+   * Images something still needs: a card here or in the print list, or a label template saved or
+   * in the print list.
+   * @param {import("../labels/template.js").LabelTemplate[]} [templates]  Saved templates, if known.
+   */
+  function imagesInUse(templates = []) {
     const fromCards = [token, ...saved].map((other) => storedImageOf(other.art));
-    const fromList = printList.items.map(({ design }) =>
-      design.type === "token" ? storedImageOf(design.art) : undefined,
-    );
-    return new Set([...fromCards, ...fromList]);
+    const fromList = printList.items.flatMap(({ design }) => {
+      if (design.type === "token") return [storedImageOf(design.art)];
+      if (design.type === "label") return imageIdsOf(design.template);
+      return [];
+    });
+    const fromTemplates = templates.flatMap(imageIdsOf);
+    return new Set([...fromCards, ...fromList, ...fromTemplates]);
   }
 
   /* Saving */
@@ -525,8 +536,9 @@ export function createTokenEditor({ printList, labelSize, onShow, onPreview }) {
       else if (editing) showActions();
       else if (saved.length > 0) showLibrary();
       else edit(blankToken());
-      // Remove images left behind, e.g. by labels removed from the print list after their card was deleted.
-      const inUse = imagesInUse();
+      // Remove images left behind, e.g. by labels removed from the print list after their card was
+      // deleted, or by a template that lost its logo.
+      const inUse = imagesInUse(await templateStore.list().catch(() => []));
       for (const id of await tokenStore.imageIds()) {
         if (!inUse.has(id)) tokenStore.deleteImage(id).catch(() => {});
       }

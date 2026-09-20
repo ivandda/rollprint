@@ -1,6 +1,6 @@
 /** @import { Block, LabelTemplate, TextSize, Values } from "../labels/template.js" */
 /** @import { Media } from "../printers/types.js" */
-import { fill, TEXT_SIZES } from "../labels/template.js";
+import { fill, IMAGE_WIDTHS, TEXT_SIZES } from "../labels/template.js";
 
 /** Room between the border and the content, in millimetres. */
 export const MARGINS = { s: 1.5, m: 3, l: 5 };
@@ -40,7 +40,8 @@ const SMALLEST_SCALE = 0.4;
 /**
  * A block where it goes. `room` is the width it may take, infinite when the label is as wide as
  * its content; `width` is what it takes until the rows are laid out, then its share of the row.
- * @typedef {Rect & { block: Block, room: number, heading?: PlacedText, text?: PlacedText }} PlacedBlock
+ * An image keeps the width its block asks for.
+ * @typedef {Rect & { block: Block, room: number, fixed?: boolean, heading?: PlacedText, text?: PlacedText }} PlacedBlock
  */
 
 /**
@@ -53,10 +54,11 @@ const SMALLEST_SCALE = 0.4;
  */
 
 /**
- * Where everything goes on a label, in dots. Rows stack from the top and blocks in a row share the
- * width. Named sizes are what they say; Fit text takes the room left once the other rows have
- * theirs. When the content is taller than a fixed label, every size shrinks alike until it fits;
- * when it is shorter, it sits in the middle.
+ * Where everything goes on a label, in dots. Rows stack from the top; an image takes the share of
+ * the width its block asks for and the other blocks in its row split the rest. Named sizes are
+ * what they say; Fit text takes the room left once the other rows have theirs. When the content is
+ * taller than a fixed label, every size shrinks alike until it fits; when it is shorter, it sits
+ * in the middle.
  * @param {LabelTemplate} template
  * @param {Values} values
  * @param {Frame} frame
@@ -79,13 +81,25 @@ export function layoutLabel(template, values, frame, dotsPerMm, measure) {
     /** @param {TextSize} size */
     const dots = (size) => TEXT_SIZES[size].mm * mm * scale;
     const contentWidth = autoWidth ? Number.POSITIVE_INFINITY : frame.width - 2 * inset;
+    const contentHeight = autoHeight ? Number.POSITIVE_INFINITY : frame.height - 2 * inset;
+    // Images are a share of the label's width, or of its height when the width is up to the content.
+    const imageBasis = autoWidth ? contentHeight : contentWidth;
     const rowGap = ROW_GAP * mm;
 
     // Every block at its named size; Fit text is measured later, once the room left is known.
     const rows = template.rows.map(({ blocks }) => {
       const gaps = (blocks.length - 1) * BLOCK_GAP * mm;
-      const share = autoWidth ? Number.POSITIVE_INFINITY : (contentWidth - gaps) / blocks.length;
-      return blocks.map((block) => placeBlock(block, values, share, dots, measure, mm));
+      const images = blocks.map((block) => imageSize(block, imageBasis, contentHeight));
+      const imagesWidth = images.reduce((sum, size) => sum + (size?.width ?? 0), 0);
+      const flexible = images.filter((size) => !size).length;
+      const share = autoWidth
+        ? Number.POSITIVE_INFINITY
+        : Math.max(0, contentWidth - gaps - imagesWidth) / flexible;
+      return blocks.map((block, i) => {
+        const size = images[i];
+        if (size) return { block, room: size.width, fixed: true, x: 0, y: 0, ...size };
+        return placeBlock(block, values, share, dots, measure, mm);
+      });
     });
     const fixedHeight = rows.reduce((sum, blocks) => sum + rowHeight(blocks), 0) + rowGap * (rows.length - 1);
 
@@ -114,13 +128,15 @@ export function layoutLabel(template, values, frame, dotsPerMm, measure) {
     let y = 0;
     for (const blocks of rows) {
       const height = rowHeight(blocks);
-      const share = (width - (blocks.length - 1) * BLOCK_GAP * mm) / blocks.length;
+      const fixedWidth = blocks.reduce((sum, placed) => sum + (placed.fixed ? placed.width : 0), 0);
+      const flexible = blocks.filter((placed) => !placed.fixed).length;
+      const share = Math.max(0, width - (blocks.length - 1) * BLOCK_GAP * mm - fixedWidth) / flexible;
       let x = 0;
       for (const placed of blocks) {
         placed.x = x;
-        placed.width = share;
+        if (!placed.fixed) placed.width = share;
         placed.y = y + (height - placed.height) / 2;
-        x += share + BLOCK_GAP * mm;
+        x += placed.width + BLOCK_GAP * mm;
       }
       y += height + rowGap;
     }
@@ -176,6 +192,7 @@ export function layoutLabel(template, values, frame, dotsPerMm, measure) {
  */
 function placeBlock(block, values, width, dots, measure, mm) {
   const placed = { block, x: 0, y: 0, width: 0, height: 0, room: width };
+  if (block.type === "image") return { ...placed, fixed: true };
   if (block.type === "space") return { ...placed, height: SPACES[block.size] * mm };
   if (block.type === "divider")
     return { ...placed, height: (DIVIDERS[block.weight] + 2 * DIVIDER_ROOM) * mm };
@@ -188,6 +205,26 @@ function placeBlock(block, values, width, dots, measure, mm) {
   };
   sizeTextBlock(result, measure);
   return result;
+}
+
+/**
+ * The box an image block takes: its share of the label across, as tall as the image's proportions
+ * make it, and never taller than the label. Nothing without an image.
+ * @param {Block} block
+ * @param {number} basis  What the share is of.
+ * @param {number} tallest
+ */
+function imageSize(block, basis, tallest) {
+  if (block.type !== "image") return undefined;
+  if (!block.image) return { width: 0, height: 0 };
+  const aspect = block.image.height / block.image.width;
+  let width = IMAGE_WIDTHS[block.width].fraction * basis;
+  let height = width * aspect;
+  if (height > tallest) {
+    height = tallest;
+    width = height / aspect;
+  }
+  return { width, height };
 }
 
 /**

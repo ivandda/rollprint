@@ -357,7 +357,7 @@ export function createLabelPanel({
     document.body.dataset.editing = saved.type;
     ui.copies.value = String(count);
     ui.status.textContent = "";
-    if ("darkness" in saved) darknessChoice.value = saved.darkness;
+    if ("darkness" in saved) darknessChoice.value = saved.darkness ?? "normal";
     state.source = saved.type;
     /** @type {(design: Design) => void} */ (sources[saved.type].load)(saved);
     updateButtons();
