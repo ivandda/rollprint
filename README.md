@@ -1,23 +1,25 @@
 # Rollprint
 
-Print on a thermal label printer straight from the browser over [WebUSB](https://developer.mozilla.org/en-US/docs/Web/API/WebUSB_API). No drivers or installs. Two modes, switched from the menu in the header: **Cards** prints Magic: The Gathering cards and tokens as stickers, and **Labels** prints labels of your own from templates.
+Print on a thermal label printer straight from the browser over [WebUSB](https://developer.mozilla.org/en-US/docs/Web/API/WebUSB_API). No drivers, no installs, no account: everything stays in your browser. Two modes, switched from the menu in the header: **Labels** prints labels of your own from templates, and **Cards** (the original MTG Thermal Printer) prints Magic: The Gathering cards and tokens as stickers.
 
 **[Open the app](https://ivandda.github.io/rollprint/)**
 
 ## Labels
 
-- Pick a template (Text, Address, Name tag, Shelf, Date), fill in its fields and print. What you typed is remembered per template.
-- **Design your own templates**: rows of blocks (text with a heading, images, dividers, spaces; up to three side by side), a border, margins, orientation and length. Anything in braces, like `{Product}`, becomes a field to fill in. Templates and their images are saved in your browser and never leave it.
-- **Logos and photos**: a logo prints crisp, a photo is dithered with the darkness of your choice. An image takes a quarter, a third, half or all of the label's width.
-- **QR codes and barcodes**: a QR code of a link or text per label, and Code 128 barcodes with the text under them, scaled to whole dots so they scan.
-- **Typefaces**: Sans, Serif, Mono or Condensed per template, bundled so a template prints the same everywhere.
-- Templates re-flow to whatever paper is loaded: die-cut labels, continuous rolls (as long as the content needs) and round labels.
-- Landscape templates run along the roll; Fit text takes the room the other rows leave.
-- **Many labels from a list**: paste one label per line (tabs or commas between fields, an optional first line naming them). The whole list is one print list item with a page per line.
-- **Share templates**: export a template with its images as a file and import it elsewhere, or copy a link for a template without images.
-- Labels go in the same print list as cards, with copies, and can be changed from there.
+**Print.** Pick a template, fill in its fields, print. Starters cover the usual labels: Text, Product, Address, Name tag, Shelf, QR link, Inventory, Date. What you typed is remembered per template. To print many at once, paste a list with one label per line (tabs or commas between fields, an optional first line naming them): the whole list is one print list item with a page per line.
 
-## Cards
+**Templates.** Design your own in the Templates tab. A template is rows of blocks, up to three side by side:
+
+- **Text**, with an optional heading, in named sizes (Tiny to Huge, or Fit), aligned and bold as you like.
+- **Image**: a logo, printed crisp, or a photo, dithered; a quarter, a third, half or all of the label wide.
+- **QR code** of a link or any text, and **barcode** (Code 128) with its text under it, both scaled to whole dots so they scan.
+- **Divider** and **space**.
+
+Anything written in braces, like `{Product}`, becomes a field to fill in. A template also chooses a typeface (Sans, Serif, Mono or Condensed, all bundled so it prints the same everywhere), a border, margins, an orientation and, on a continuous roll, a fixed length or the content's. Templates re-flow to whatever paper is loaded: die-cut labels, continuous rolls and round labels. Landscape reads along the label's longer side; Fit text takes the room the other rows leave.
+
+**Sharing.** Export a template with its images as a file and import it in another browser, or copy a link for a template without images. That is how a shop hands its product label to everyone who prints: design it once, export it, and each computer imports the file and fills in the fields. Templates and their images are saved in the browser and never leave it.
+
+## Cards (MTG Thermal Printer)
 
 - **Search** tokens or any paper card, with [Scryfall syntax](https://scryfall.com/docs/syntax) (`c:g power>=4`). Pick the printing and side, or both sides of a double-faced card to fold, and open the tokens and emblems a card makes.
 - **Preview** the exact black-and-white print, with darkness, paper size and border options.
@@ -51,7 +53,7 @@ Browsers can only use USB devices running Microsoft's WinUSB driver ([why](https
 2. Open [Zadig](https://zadig.akeo.ie), choose **Options → List All Devices** and pick the printer.
 3. Choose **WinUSB**, click **Replace Driver**, then reload the app and click **Connect printer**.
 
-Brother's software won't work with the printer while WinUSB is installed. To undo it, uninstall the device in Device Manager with its driver removed, then reconnect the printer.
+Brother's software won't work with the printer while WinUSB is installed. To undo it, uninstall the device in Device Manager with its driver removed, then reconnect the printer. For a workplace that also prints from Brother's own software, that is the trade-off to weigh before switching a printer over.
 
 ## Development
 
@@ -66,6 +68,8 @@ python3 -m http.server 8000
 ```
 
 Pushes to `main` run the checks and deploy to GitHub Pages.
+
+**Layout:** `src/labels/` holds templates as data (blocks, placeholders, starters, files and links, lists); `src/imaging/label-layout.js` lays a template out (pure, tested with a fake text measure) and `label-render.js` draws it; `src/ui/labels/` is the Print tab and the designer. Cards live in `src/scryfall/`, `src/imaging/text-card.js` and the rest of `src/ui/`. Whatever is printed is a *design*, plain data in `src/designs.js` that the print list saves and redraws for the loaded paper; `src/ui/panel/` has one *source* per kind of design behind the shared label panel.
 
 **Adding a printer:** `src/transport/` moves bytes (WebUSB), and `src/printers/` has one driver per printer family. Implement `PrinterDriver` from `src/printers/types.js` and register it in `src/printers/index.js`. The Brother QL tests compare against output from brother_ql (`test/fixtures/brother-ql/generate.py`).
 
