@@ -3,6 +3,7 @@
 /** @import { LabelSize } from "../label-size.js" */
 import { FONTS, loadFonts } from "../../imaging/fonts.js";
 import { prepareImage } from "../../imaging/images.js";
+import { AUTO_LENGTH_MM } from "../../imaging/label-layout.js";
 import { renderLabel } from "../../imaging/label-render.js";
 import { STARTERS } from "../../labels/starters.js";
 import {
@@ -138,18 +139,24 @@ export function createTemplatesView({ labelSize, onShow, onSaved, onPrint, onPre
       return;
     }
     const fixed = choice.length.value === "fixed";
-    const lengthMm = Number(ui.lengthMm.value);
+    const typed = Number(ui.lengthMm.value);
+    const lengthMm = Math.min(Math.max(typed, AUTO_LENGTH_MM.min), AUTO_LENGTH_MM.max);
     template = {
       ...template,
       name: ui.name.value,
       orientation: choice.orientation.value === "portrait" ? "portrait" : "landscape",
       border: /** @type {LabelTemplate["border"]} */ (choice.border.value || "none"),
       margin: /** @type {LabelTemplate["margin"]} */ (choice.margin.value || "m"),
-      lengthMm: fixed && lengthMm > 0 ? lengthMm : undefined,
+      lengthMm: fixed && typed > 0 ? lengthMm : undefined,
       font: /** @type {LabelTemplate["font"]} */ (choice.font.value in FONTS ? choice.font.value : "sans"),
     };
     ui.lengthMm.disabled = !fixed;
     changed();
+  });
+
+  // The length field shows the limit it was kept to, once it is left.
+  ui.lengthMm.addEventListener("change", () => {
+    if (template.lengthMm) ui.lengthMm.value = String(template.lengthMm);
   });
 
   /* Rows and blocks */
@@ -740,7 +747,8 @@ export function createTemplatesView({ labelSize, onShow, onSaved, onPrint, onPre
 
   ui.preview.addEventListener("click", onPreview);
   ui.print.addEventListener("click", () => {
-    saveNow();
+    // The Print tab shows saved templates and starters, so an opened starter becomes one of yours.
+    save();
     onPrint(template);
   });
 

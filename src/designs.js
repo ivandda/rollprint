@@ -124,6 +124,21 @@ export async function renderDesign(design, media) {
 }
 
 /**
+ * One of the labels a design prints on, without drawing the others.
+ * @param {Design} design
+ * @param {Media} media
+ * @param {number} index
+ * @returns {Promise<Bitmap>}
+ */
+export async function renderPage(design, media, index) {
+  if (design.type === "label") {
+    const [page] = await renderDesign({ ...design, rows: [design.rows[index]] }, media);
+    return page;
+  }
+  return (await renderDesign(design, media))[index];
+}
+
+/**
  * @param {CardDesign} design
  * @param {number} face
  * @param {Media} media

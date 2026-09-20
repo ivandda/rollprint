@@ -279,6 +279,11 @@ select:disabled {
   cursor: pointer;
 }
 
+.mode-switch:disabled {
+  color: var(--muted);
+  cursor: default;
+}
+
 .mode-switch::after {
   content: "";
   width: 0.4rem;
