@@ -10,7 +10,8 @@ import { prepareImage } from "../imaging/images.js";
 import { cardText, imageUrl } from "../scryfall/client.js";
 import { tokenStore } from "../token-store.js";
 import { addressParam, updateAddress } from "./address.js";
-import { drawBitmap, element } from "./dom.js";
+import { drawBitmap, element, showProblem } from "./dom.js";
+import { toast } from "./toast.js";
 
 const SAVE_DELAY_MS = 400;
 
@@ -144,14 +145,14 @@ export function createTokenEditor({ printList, labelSize, onShow, onPreview }) {
     token = { ...token, art: undefined };
     changed();
     releaseImage(removed);
-    ui.status.textContent = "Image removed.";
+    toast("Image removed.");
     ui.chooseImage.focus();
   });
 
   /** @param {File} file */
   async function useImage(file) {
     if (!file.type.startsWith("image/")) {
-      ui.status.textContent = "That file isn't an image. Choose a JPEG, PNG or WebP image.";
+      showProblem(ui.status, "That file isn't an image. Choose a JPEG, PNG or WebP image.");
       return;
     }
     ui.status.textContent = "Adding the image…";
@@ -159,14 +160,14 @@ export function createTokenEditor({ printList, labelSize, onShow, onPreview }) {
     try {
       image = await prepareImage(file);
     } catch {
-      ui.status.textContent = "This image can't be opened here. Choose a JPEG, PNG or WebP image.";
+      showProblem(ui.status, "This image can't be opened here. Choose a JPEG, PNG or WebP image.");
       return;
     }
     let id;
     try {
       id = await tokenStore.saveImage(image);
     } catch {
-      ui.status.textContent = "This browser can't save images, so the image can't be added.";
+      showProblem(ui.status, "This browser can't save images, so the image can't be added.");
       return;
     }
     const replaced = token.art;
@@ -217,7 +218,7 @@ export function createTokenEditor({ printList, labelSize, onShow, onPreview }) {
       await tokenStore.save(current);
     } catch {
       canSave = false;
-      ui.status.textContent = "This browser can't save your cards, so they last until the page is closed.";
+      showProblem(ui.status, "This browser can't save your cards, so they last until the page is closed.");
       showActions();
     }
   }
@@ -250,13 +251,14 @@ export function createTokenEditor({ printList, labelSize, onShow, onPreview }) {
     if (!ui.library.hidden) showList();
   });
 
-  /** @param {string} [message]  e.g. what was just deleted. */
-  function showLibrary(message = "") {
+  /** @param {string} [problem]  e.g. what a restored backup was missing. */
+  function showLibrary(problem) {
     saveNow();
     editing = false;
     ui.editor.hidden = true;
     ui.library.hidden = false;
-    ui.libraryStatus.textContent = message;
+    if (problem) showProblem(ui.libraryStatus, problem);
+    else ui.libraryStatus.textContent = "";
     showList();
     onShow(undefined);
   }
@@ -305,6 +307,7 @@ export function createTokenEditor({ printList, labelSize, onShow, onPreview }) {
     ui.toughness.value = next.toughness;
     ui.rules.value = next.rules;
     ui.status.textContent = "";
+    delete ui.status.dataset.tone;
     ui.library.hidden = true;
     ui.editor.hidden = false;
     showImage();
@@ -346,7 +349,8 @@ export function createTokenEditor({ printList, labelSize, onShow, onPreview }) {
       : "";
     try {
       await navigator.clipboard.writeText(link);
-      ui.status.textContent = `Link copied. Opening it adds a copy of ${titleOf(token)} to My cards.${leftOut}`;
+      toast("Link copied.");
+      ui.status.textContent = `Opening the link adds a copy of ${titleOf(token)} to My cards.${leftOut}`;
     } catch {
       const field = Object.assign(document.createElement("input"), {
         className: "link-field",
@@ -371,7 +375,7 @@ export function createTokenEditor({ printList, labelSize, onShow, onPreview }) {
         showLibrary(message);
       } else {
         edit(blankToken());
-        ui.status.textContent = message;
+        showProblem(ui.status, message);
       }
       return;
     }
@@ -381,7 +385,7 @@ export function createTokenEditor({ printList, labelSize, onShow, onPreview }) {
       ui.status.textContent = `${titleOf(existing)} is already in My cards.`;
     } else {
       save();
-      ui.status.textContent = `Added ${titleOf(shared)} to My cards.`;
+      toast(`Added ${titleOf(shared)} to My cards.`);
     }
   }
 
@@ -398,13 +402,12 @@ export function createTokenEditor({ printList, labelSize, onShow, onPreview }) {
     clearTimeout(saveTimer);
     saveTimer = undefined;
     saved = saved.filter((other) => other.id !== deleted.id);
-    const message = `Deleted ${titleOf(deleted)}.`;
+    toast(`Deleted ${titleOf(deleted)}.`);
     if (saved.length > 0) {
-      showLibrary(message);
+      showLibrary();
       ui.newToken.focus();
     } else {
       edit(blankToken());
-      ui.status.textContent = message;
       ui.name.focus();
     }
     await tokenStore.delete(deleted.id).catch(() => {});
@@ -442,8 +445,9 @@ export function createTokenEditor({ printList, labelSize, onShow, onPreview }) {
     });
     link.click();
     setTimeout(() => URL.revokeObjectURL(link.href), 1000);
-    ui.libraryStatus.textContent =
-      saved.length === 1 ? "Downloaded a backup of 1 card." : `Downloaded a backup of ${saved.length} cards.`;
+    toast(
+      saved.length === 1 ? "Downloaded a backup of 1 card." : `Downloaded a backup of ${saved.length} cards.`,
+    );
   }
 
   /**
@@ -456,11 +460,11 @@ export function createTokenEditor({ printList, labelSize, onShow, onPreview }) {
     try {
       backup = readBackup(await file.text());
     } catch (error) {
-      status.textContent = error instanceof Error ? error.message : String(error);
+      showProblem(status, error instanceof Error ? error.message : String(error));
       return;
     }
     if (!canSave) {
-      status.textContent = "This browser can't save your cards, so the backup can't be restored here.";
+      showProblem(status, "This browser can't save your cards, so the backup can't be restored here.");
       return;
     }
     const added = backup.cards.filter((card) => !saved.some((other) => other.id === card.id));
@@ -485,12 +489,13 @@ export function createTokenEditor({ printList, labelSize, onShow, onPreview }) {
       return;
     }
     if (backup.cards.length === 0) {
-      status.textContent = "This backup has no cards.";
+      showProblem(status, "This backup has no cards.");
       return;
     }
     const restored = added.length === 1 ? "Restored 1 card." : `Restored ${added.length} cards.`;
     const skipped = already === 1 ? "1 was already in My cards." : `${already} were already in My cards.`;
-    showLibrary(
+    showLibrary();
+    toast(
       added.length === 0
         ? "Every card in this backup is already in My cards."
         : already

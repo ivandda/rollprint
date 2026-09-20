@@ -28,10 +28,11 @@ import { clampCopies } from "../print-list.js";
 import { cardFaces, madeBy, pickCard } from "../scryfall/client.js";
 import { updateAddress } from "./address.js";
 import { bindArtArranger } from "./art-arranger.js";
-import { cardThumbnail, drawBitmap, element, problemMessage, showMessage } from "./dom.js";
+import { cardThumbnail, drawBitmap, element, problemMessage, showProblem } from "./dom.js";
 import { preparePrinter } from "./printer-button.js";
 import { readSetting, writeSetting } from "./settings.js";
 import { bindStepper } from "./stepper.js";
+import { toast } from "./toast.js";
 
 /**
  * The label being made, from a card or a custom token: its preview, the print options, and
@@ -45,6 +46,7 @@ import { bindStepper } from "./stepper.js";
  *   arranged. `fromList` means it belongs to a label from the print list, not to My cards.
  * @param {(card: ScryfallCard, face: number) => void} options.onCustomize
  * @param {(result: EditResult, id: string) => void} options.onEditEnd  How changing a label ended.
+ * @param {() => void} options.openList  Opens the print list, from the toast after adding to it.
  */
 export function createLabelPanel({
   scryfall,
@@ -54,6 +56,7 @@ export function createLabelPanel({
   onTokenChange,
   onCustomize,
   onEditEnd,
+  openList,
 }) {
   const ui = {
     label: element("#label", HTMLElement),
@@ -467,7 +470,7 @@ export function createLabelPanel({
       state.pages = [];
       state.artBox = undefined;
       ui.label.dataset.state = "empty";
-      ui.status.textContent = problemMessage(error);
+      showProblem(ui.status, problemMessage(error));
     }
     showArrangeable();
     showPages();
@@ -522,7 +525,7 @@ export function createLabelPanel({
     ui.status.textContent = "";
     const advice = await preparePrinter(printer);
     if (printer.state.kind !== "ready") {
-      showMessage(ui.status, advice.text, advice.link);
+      showProblem(ui.status, advice.text, advice.link);
       return;
     }
 
@@ -535,9 +538,9 @@ export function createLabelPanel({
       const pages = await renderDesign(current, media);
       const all = Array.from({ length: count }, () => pages).flat();
       await printer.print(all);
-      ui.status.textContent = all.length === 1 ? "Printed." : `Printed ${all.length} pages.`;
+      toast(all.length === 1 ? "Printed." : `Printed ${all.length} pages.`);
     } catch (error) {
-      ui.status.textContent = problemMessage(error);
+      showProblem(ui.status, problemMessage(error));
     } finally {
       state.printing = false;
       ui.label.classList.remove("feeding");
@@ -554,8 +557,11 @@ export function createLabelPanel({
       return;
     }
     printList.add(current, count);
-    ui.status.textContent =
-      count === 1 ? "Added to the print list." : `Added ${count} pages to the print list.`;
+    const pages = count * pageCount(current, labelSize.current);
+    toast(pages === 1 ? "Added to the print list." : `Added ${pages} pages to the print list.`, {
+      text: "Open",
+      onClick: openList,
+    });
   }
 
   /**
@@ -725,7 +731,7 @@ export function createLabelPanel({
      * @param {{ href: string, text: string }} [link]
      */
     showStatus(text, link) {
-      showMessage(ui.status, text, link);
+      showProblem(ui.status, text, link);
     },
   };
 }

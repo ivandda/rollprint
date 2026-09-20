@@ -8,9 +8,10 @@ import {
   markerCounts,
   markerTotal,
 } from "../markers.js";
-import { element } from "./dom.js";
+import { element, showMessage, showProblem } from "./dom.js";
 import { readSetting, writeSetting } from "./settings.js";
 import { bindStepper } from "./stepper.js";
+import { toast } from "./toast.js";
 
 /**
  * The markers to print and how many of each, including markers typed in, remembered in this browser.
@@ -87,7 +88,7 @@ export function createMarkersPicker({ onChange, onPreview }) {
       // Keep keyboard focus nearby: on the Remove button now in its place, or on the text field.
       const next = ui.customList.children[Math.min(index, custom.length - 1)]?.querySelector(".remove");
       (next instanceof HTMLElement ? next : ui.addText).focus();
-      ui.customStatus.textContent = `Removed ${marker.name}.`;
+      toast(`Removed ${marker.name}.`);
     });
     row.append(remove);
     return row;
@@ -105,7 +106,7 @@ export function createMarkersPicker({ onChange, onPreview }) {
     event.preventDefault();
     const name = ui.addText.value.trim();
     if (!name) {
-      ui.customStatus.textContent = "Type the marker's text first.";
+      showProblem(ui.customStatus, "Type the marker's text first.");
       ui.addText.focus();
       return;
     }
@@ -117,17 +118,18 @@ export function createMarkersPicker({ onChange, onPreview }) {
       update({ ...counts, [existing.id]: (counts[existing.id] ?? 0) + 1 });
       const input = inputs.get(existing.id);
       if (input) input.value = String(counts[existing.id] ?? 0);
-      ui.customStatus.textContent = `${existing.name} is already in the list, so it got one more.`;
+      showMessage(ui.customStatus, `${existing.name} is already in the list, so it got one more.`);
       return;
     }
     const marker = customMarker(name);
     custom = [...custom, marker];
     update({ ...counts, [marker.id]: 1 });
     showCustom();
-    ui.customStatus.textContent =
-      custom.length >= MAX_CUSTOM
-        ? `Added ${marker.name}. That's the most markers you can add; remove one to add another.`
-        : `Added ${marker.name}.`;
+    toast(`Added ${marker.name}.`);
+    showMessage(
+      ui.customStatus,
+      custom.length >= MAX_CUSTOM ? "That's the most markers you can add. Remove one to add another." : "",
+    );
     ui.addText.focus();
   });
 
