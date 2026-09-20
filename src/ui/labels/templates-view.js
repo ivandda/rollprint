@@ -1,25 +1,34 @@
 /** @import { LabelDesign } from "../../designs.js" */
-/** @import { Block, ImageBlock, LabelTemplate, Row, TextBlock, TextSize } from "../../labels/template.js" */
-
+/** @import { Path } from "../../labels/cells.js" */
+/** @import { Cell, ImagePart, LabelTemplate, Part, TextPart, TextSize } from "../../labels/template.js" */
 /** @import { LabelSize } from "../label-size.js" */
 import { FONTS, loadFonts } from "../../imaging/fonts.js";
 import { prepareImage } from "../../imaging/images.js";
 import { AUTO_LENGTH_MM } from "../../imaging/label-layout.js";
-import { renderLabel } from "../../imaging/label-render.js";
-import { movedBetweenRows, movedInRow } from "../../labels/arrange.js";
+import { layoutOn, renderLabel } from "../../imaging/label-render.js";
+import {
+  cellAt,
+  isSplit,
+  leavesOf,
+  removeAt,
+  shareOf,
+  splitAt,
+  withPart,
+  withShare,
+} from "../../labels/cells.js";
 import { STARTERS } from "../../labels/starters.js";
 import {
   BARCODE_HEIGHTS,
-  barcodeBlock,
+  barcodePart,
   fieldsOf,
-  IMAGE_WIDTHS,
-  imageBlock,
   imageIdsOf,
-  qrBlock,
+  imagePart,
+  qrPart,
+  SHARES,
   sampleValues,
   TEXT_SIZES,
   TURNS,
-  textBlock,
+  textPart,
 } from "../../labels/template.js";
 import {
   LINK_PARAM,
@@ -35,14 +44,12 @@ import { toast } from "../toast.js";
 
 const SAVE_DELAY_MS = 400;
 
-/** What can be put on a label, and what each starts as. */
+/** What a cell can hold, and what each starts as. */
 const PARTS = /** @type {const} */ ({
-  text: { name: "Text", make: () => textBlock({ text: "{Text}" }) },
-  image: { name: "Image", make: () => /** @type {Block} */ (imageBlock()) },
-  qr: { name: "QR code", make: () => /** @type {Block} */ (qrBlock()) },
-  barcode: { name: "Barcode", make: () => /** @type {Block} */ (barcodeBlock()) },
-  divider: { name: "Divider", make: () => /** @type {Block} */ ({ type: "divider", weight: "thin" }) },
-  space: { name: "Space", make: () => /** @type {Block} */ ({ type: "space", size: "m" }) },
+  text: { name: "Text", make: () => /** @type {Part} */ (textPart({ text: "{Text}" })) },
+  image: { name: "Image", make: () => /** @type {Part} */ (imagePart()) },
+  qr: { name: "QR code", make: () => /** @type {Part} */ (qrPart()) },
+  barcode: { name: "Barcode", make: () => /** @type {Part} */ (barcodePart()) },
 });
 
 /** @returns {LabelTemplate} */
@@ -52,17 +59,18 @@ const blankTemplate = () => ({
   orientation: "landscape",
   border: "none",
   margin: "m",
-  rows: [{ blocks: [textBlock({ text: "{Text}", size: "fit", align: "center", bold: true })] }],
+  cell: { part: textPart({ text: "{Text}", size: "fit", align: "center", bold: true }) },
 });
 
 /** @param {LabelTemplate} template */
 const titleOf = (template) => template.name.trim() || "Untitled template";
 
 /**
- * The Templates tab: My templates, saved in this browser, and the designer for one. Templates save
- * themselves as they are edited.
+ * The Templates tab: My templates, saved in this browser, and the designer for one. A template is
+ * designed in two steps: its layout, a map of numbered cells, then what each cell holds. Templates
+ * save themselves as they are edited.
  * @param {object} options
- * @param {LabelSize} options.labelSize  For the previews in My templates, and whether a roll is loaded.
+ * @param {LabelSize} options.labelSize  For the previews and the map, and whether a roll is loaded.
  * @param {(design: LabelDesign | undefined) => void} options.onShow  The template being designed
  *   changed, or none while My templates is shown.
  * @param {(templates: LabelTemplate[]) => void} options.onSaved  My templates changed.
@@ -82,8 +90,17 @@ export function createTemplatesView({ labelSize, onShow, onSaved, onPrint, onPre
     saveState: element("#template-save-state", HTMLElement),
     form: element("#template-form", HTMLFormElement),
     name: element("#template-name", HTMLInputElement),
-    parts: element("#template-parts", HTMLElement),
-    addPart: element("#add-part", HTMLElement),
+    map: element("#cell-map", HTMLElement),
+    changeLayout: element("#change-layout", HTMLButtonElement),
+    layoutTools: element("#layout-tools", HTMLElement),
+    layoutCell: element("#layout-cell", HTMLElement),
+    splitAcross: element("#split-across", HTMLButtonElement),
+    splitDown: element("#split-down", HTMLButtonElement),
+    shareField: element("#share-field", HTMLElement),
+    removeCell: element("#remove-cell", HTMLButtonElement),
+    cellTitle: element("#cell-title", HTMLElement),
+    cellKind: element("#cell-kind", HTMLSelectElement),
+    cellPart: element("#cell-part", HTMLElement),
     imageFile: element("#template-image-file", HTMLInputElement),
     lengthField: element("#length-field", HTMLElement),
     lengthFixed: element("#template-length-fixed", HTMLElement),
@@ -111,6 +128,8 @@ export function createTemplatesView({ labelSize, onShow, onSaved, onPrint, onPre
     margin: element("#template-margin", HTMLSelectElement),
     orientation: element("#template-orientation", HTMLSelectElement),
     length: element("#template-length", HTMLSelectElement),
+    lines: element("#template-lines", HTMLSelectElement),
+    share: /** @type {RadioNodeList} */ (ui.form.elements.namedItem("share")),
   };
 
   /** Saved templates, by name. @type {LabelTemplate[]} */
@@ -118,6 +137,10 @@ export function createTemplatesView({ labelSize, onShow, onSaved, onPrint, onPre
   /** The template in the designer, shown unless My templates is. */
   let template = blankTemplate();
   let editing = false;
+  /** The cell being filled in. @type {Path} */
+  let selected = [];
+  /** Whether the layout tools are out. */
+  let changingLayout = false;
   /** @type {ReturnType<typeof setTimeout> | undefined} */
   let saveTimer;
   let canSave = true;
@@ -139,13 +162,24 @@ export function createTemplatesView({ labelSize, onShow, onSaved, onPrint, onPre
       )
     )
       return;
-    if (target.closest("#template-parts")) {
+    if (target === ui.cellKind) {
+      const kind = /** @type {keyof typeof PARTS | "none"} */ (ui.cellKind.value);
+      setCell(withPart(template.cell, selected, kind === "none" ? undefined : PARTS[kind].make()));
+      focusFirst(ui.cellPart);
+      return;
+    }
+    if (target.name === "share") {
+      setCell(withShare(template.cell, selected, SHARES[Number(choice.share.value)].share));
+      return;
+    }
+    if (target.closest("#cell-part")) {
       partInput(target);
       return;
     }
     const fixed = choice.length.value === "fixed";
     const typed = Number(ui.lengthMm.value);
     const lengthMm = Math.min(Math.max(typed, AUTO_LENGTH_MM.min), AUTO_LENGTH_MM.max);
+    const lines = choice.lines.value;
     template = {
       ...template,
       name: ui.name.value,
@@ -154,6 +188,7 @@ export function createTemplatesView({ labelSize, onShow, onSaved, onPrint, onPre
       margin: /** @type {LabelTemplate["margin"]} */ (choice.margin.value),
       lengthMm: fixed && typed > 0 ? lengthMm : undefined,
       font: /** @type {LabelTemplate["font"]} */ (choice.font.value in FONTS ? choice.font.value : "sans"),
+      lines: lines === "thin" || lines === "thick" ? lines : undefined,
     };
     ui.lengthFixed.hidden = !fixed;
     if (fixed && target === choice.length) ui.lengthMm.focus();
@@ -172,143 +207,181 @@ export function createTemplatesView({ labelSize, onShow, onSaved, onPrint, onPre
 
   labelSize.addEventListener("change", () => {
     showLengthField();
+    if (editing) showMap();
     if (!ui.library.hidden) showLists();
   });
 
-  /* The parts of the label */
+  /* The layout: a map of numbered cells */
 
-  /** The row and block a control belongs to. @param {Element} target */
-  function placeOf(target) {
-    const part = target.closest(".part");
-    const { row = "-1", block = "-1" } = part instanceof HTMLElement ? part.dataset : {};
-    return { row: Number(row), block: Number(block) };
+  /** @param {Cell} cell */
+  function setCell(cell) {
+    template = { ...template, cell };
+    showMap();
+    showCell();
+    changed();
+  }
+
+  /** The number of the cell at a path, as the map shows it. @param {Path} path */
+  const numberOf = (path) =>
+    leavesOf(template.cell).findIndex(({ path: other }) => samePath(other, path)) + 1;
+
+  /** @param {Path} a @param {Path} b */
+  const samePath = (a, b) => a.length === b.length && a.every((step, i) => step === b[i]);
+
+  /** The first cell under a path that holds something, or could. @param {Path} path */
+  function leafUnder(path) {
+    const steps = [...path];
+    while (isSplit(cellAt(template.cell, steps))) steps.push("first");
+    return steps;
+  }
+
+  /** Draws the map in the label's proportions, the way the label reads, and marks the chosen cell. */
+  function showMap() {
+    if (numberOf(selected) === 0) selected = leafUnder([]);
+    const { width, height } = layoutOn(template, sampleValues(template), labelSize.current);
+    ui.map.style.setProperty("--map-aspect", String(width / Math.max(height, 1)));
+    let number = 0;
+    /**
+     * @param {Cell} cell
+     * @param {Path} path
+     * @returns {HTMLElement}
+     */
+    const build = (cell, path) => {
+      if (isSplit(cell)) {
+        const holder = Object.assign(document.createElement("div"), {
+          className: `cell-split ${cell.split}`,
+        });
+        const first = build(cell.first, [...path, "first"]);
+        const second = build(cell.second, [...path, "second"]);
+        first.style.flex = `${cell.share} 1 0`;
+        second.style.flex = `${1 - cell.share} 1 0`;
+        holder.append(first, second);
+        return holder;
+      }
+      number++;
+      const kind = cell.part ? PARTS[cell.part.type].name : "Empty";
+      const button = Object.assign(document.createElement("button"), { type: "button", className: "cell" });
+      button.setAttribute("aria-pressed", String(samePath(path, selected)));
+      button.setAttribute("aria-label", `Cell ${number}, ${kind.toLowerCase()}`);
+      button.append(
+        Object.assign(document.createElement("span"), {
+          className: "cell-number",
+          textContent: String(number),
+        }),
+        Object.assign(document.createElement("span"), { className: "cell-holds", textContent: kind }),
+      );
+      button.addEventListener("click", () => {
+        selected = path;
+        showMap();
+        showCell();
+      });
+      return button;
+    };
+    ui.map.replaceChildren(build(template.cell, []));
+    showLayoutTools();
+  }
+
+  function showLayoutTools() {
+    ui.changeLayout.setAttribute("aria-pressed", String(changingLayout));
+    ui.layoutTools.hidden = !changingLayout;
+    ui.layoutCell.textContent = `Cell ${numberOf(selected)}`;
+    const share = shareOf(template.cell, selected);
+    ui.shareField.hidden = share === undefined;
+    ui.removeCell.hidden = selected.length === 0;
+    if (share === undefined) return;
+    const index = SHARES.findIndex((option) => Math.abs(option.share - share) < 0.01);
+    choice.share.value = index < 0 ? "" : String(index);
+  }
+
+  ui.changeLayout.addEventListener("click", () => {
+    changingLayout = !changingLayout;
+    showLayoutTools();
+    if (changingLayout) ui.splitAcross.focus();
+  });
+  ui.splitAcross.addEventListener("click", () => split("across"));
+  ui.splitDown.addEventListener("click", () => split("down"));
+  /** @param {"across" | "down"} direction */
+  function split(direction) {
+    const cell = splitAt(template.cell, selected, direction);
+    selected = [...selected, "first"];
+    setCell(cell);
+  }
+  ui.removeCell.addEventListener("click", () => {
+    const cell = removeAt(template.cell, selected);
+    template = { ...template, cell };
+    selected = leafUnder(selected.slice(0, -1));
+    setCell(cell);
+    (ui.removeCell.hidden ? ui.changeLayout : ui.removeCell).focus();
+  });
+
+  /* The chosen cell */
+
+  /** Shows what the chosen cell holds, and its controls. */
+  function showCell() {
+    const leaf = cellAt(template.cell, selected);
+    const part = isSplit(leaf) ? undefined : leaf.part;
+    ui.cellTitle.textContent = `Cell ${numberOf(selected)}`;
+    ui.cellKind.value = part?.type ?? "none";
+    ui.cellPart.replaceChildren(...(part ? partControls(part) : []));
+    ui.cellPart.hidden = !part;
+  }
+
+  /** @param {HTMLElement} holder */
+  function focusFirst(holder) {
+    for (const control of holder.querySelectorAll("input, textarea, select, .button")) {
+      if (!(control instanceof HTMLElement) || !control.checkVisibility()) continue;
+      control.focus();
+      break;
+    }
   }
 
   /**
-   * Keeps what was typed into a part's controls, without redrawing the list, so typing goes on.
+   * Keeps what was typed into the cell's controls, without redrawing them, so typing goes on.
    * @param {HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement} target
    */
   function partInput(target) {
-    const { row, block } = placeOf(target);
-    if (!template.rows[row]?.blocks[block]) return;
+    const leaf = cellAt(template.cell, selected);
+    if (isSplit(leaf) || !leaf.part) return;
     const setting = target.dataset.setting ?? target.name;
     const value =
       target instanceof HTMLInputElement && target.type === "checkbox" ? target.checked : target.value;
-    updateBlock(row, block, (current) => /** @type {Block} */ ({ ...current, [setting]: value }));
+    setPart(selected, /** @type {Part} */ ({ ...leaf.part, [setting]: value }));
   }
 
   /**
-   * @param {number} row
-   * @param {number} block
-   * @param {(block: Block) => Block} change
+   * @param {Path} path
+   * @param {Part} part
    */
-  function updateBlock(row, block, change) {
-    const rows = template.rows.map((other, index) =>
-      index === row ? { blocks: other.blocks.map((b, i) => (i === block ? change(b) : b)) } : other,
-    );
-    template = { ...template, rows };
+  function setPart(path, part) {
+    template = { ...template, cell: withPart(template.cell, path, part) };
     changed();
   }
 
-  /** @param {Row[]} rows */
-  function setRows(rows) {
-    template = { ...template, rows };
-    showParts();
-    changed();
-  }
-
-  /** The parts as one list; those that print side by side are bracketed together. */
-  function showParts() {
-    ui.parts.replaceChildren(
-      ...template.rows.map((row, r) => {
-        const holder = Object.assign(document.createElement("div"), { className: "part-row" });
-        holder.append(...row.blocks.map((block, b) => partElement(block, r, b)));
-        return holder;
-      }),
-    );
-  }
-
   /**
-   * A part's card: its name, arrows that move it the way the label reads, Remove, and its settings.
-   * @param {Block} block
-   * @param {number} row
-   * @param {number} position  In its row.
-   */
-  function partElement(block, row, position) {
-    const holder = Object.assign(document.createElement("div"), { className: "part" });
-    holder.dataset.row = String(row);
-    holder.dataset.block = String(position);
-    const head = Object.assign(document.createElement("div"), { className: "part-head" });
-    const { rows } = template;
-    const moves = /** @type {const} */ ([
-      ["Move up", "↑", movedBetweenRows(rows, row, position, -1)],
-      ["Move down", "↓", movedBetweenRows(rows, row, position, 1)],
-      ["Move left", "←", movedInRow(rows, row, position, -1)],
-      ["Move right", "→", movedInRow(rows, row, position, 1)],
-    ]);
-    head.append(
-      Object.assign(document.createElement("span"), {
-        className: "part-kind",
-        textContent: PARTS[block.type].name,
-      }),
-      ...moves.map(([title, arrow, next]) => tool(title, arrow, !next, () => next && setRows(next))),
-      tool("Remove", "Remove", false, () => {
-        const rows = template.rows
-          .map((other, r) => (r === row ? { blocks: other.blocks.filter((_, b) => b !== position) } : other))
-          .filter((other) => other.blocks.length > 0);
-        setRows(rows);
-      }),
-    );
-    holder.append(head, ...partControls(block, row, position));
-    return holder;
-  }
-
-  /**
-   * @param {Block} block
-   * @param {number} row
-   * @param {number} position
+   * @param {Part} part
    * @returns {HTMLElement[]}
    */
-  function partControls(block, row, position) {
-    const id = `part-${row}-${position}`;
+  function partControls(part) {
     const grid = Object.assign(document.createElement("div"), { className: "part-grid" });
-    const widths = /** @type {(keyof typeof IMAGE_WIDTHS)[]} */ (Object.keys(IMAGE_WIDTHS));
-    const widthNames = widths.map((width) => IMAGE_WIDTHS[width].name);
-    switch (block.type) {
+    switch (part.type) {
       case "text":
-        return [textControls(block, row, position, id)];
+        return [textControls(part)];
       case "image":
-        return imageControls(block, row, position, id);
-      case "divider": {
-        const weight = select(["thin", "thick"], ["Thin", "Thick"], block.weight, "weight");
-        grid.append(labelFor("Line", id, weight), weight);
-        break;
-      }
-      case "space": {
-        const size = select(["s", "m", "l"], ["Small", "Medium", "Large"], block.size, "size");
-        grid.append(labelFor("Height", id, size), size);
-        break;
-      }
+        return imageControls(part);
       case "qr": {
-        const content = input(block.content, "content", "A link or text, e.g. {Link}");
-        const width = select(widths, widthNames, block.width, "width");
-        grid.append(
-          labelFor("Content", id, content),
-          content,
-          labelFor("Width", `${id}-width`, width),
-          width,
-        );
+        const content = input(part.content, "content", "A link or text, e.g. {Link}");
+        grid.append(labelFor("Content", "cell-content", content), content);
         break;
       }
       case "barcode": {
-        const content = input(block.content, "content", "Letters and digits, e.g. {Code}");
+        const content = input(part.content, "content", "Letters and digits, e.g. {Code}");
         const heights = /** @type {(keyof typeof BARCODE_HEIGHTS)[]} */ (Object.keys(BARCODE_HEIGHTS));
-        const height = select(heights, ["Small", "Medium", "Large"], block.height, "height");
+        const height = select(heights, ["Small", "Medium", "Large"], part.height, "height");
         grid.append(
-          labelFor("Content", id, content),
+          labelFor("Content", "cell-content", content),
           content,
-          labelFor("Height", `${id}-height`, height),
-          line(height, checkbox("text", block.text, "Text under it")),
+          labelFor("Height", "cell-height", height),
+          line(height, checkbox("text", part.text, "Text under it")),
         );
         break;
       }
@@ -319,20 +392,17 @@ export function createTemplatesView({ labelSize, onShow, onSaved, onPrint, onPre
   /**
    * A text's controls: the text and its size, how it is aligned, and a heading above it once one
    * is wanted.
-   * @param {TextBlock} block
-   * @param {number} row
-   * @param {number} position
-   * @param {string} id
+   * @param {TextPart} part
    */
-  function textControls(block, row, position, id) {
+  function textControls(part) {
     const sizes = /** @type {TextSize[]} */ (Object.keys(TEXT_SIZES));
     const names = sizes.map((size) => TEXT_SIZES[size].name);
-    const heading = input(block.heading, "heading", "");
-    const headingLabel = labelFor("Heading", `${id}-heading`, heading);
-    const headingPair = pair(heading, select(sizes, names, block.headingSize, "headingSize", "Heading size"));
+    const heading = input(part.heading, "heading", "");
+    const headingLabel = labelFor("Heading", "cell-heading", heading);
+    const headingPair = pair(heading, select(sizes, names, part.headingSize, "headingSize", "Heading size"));
     const text = Object.assign(document.createElement("textarea"), {
       name: "text",
-      value: block.text,
+      value: part.text,
       rows: 2,
     });
     const align = Object.assign(document.createElement("div"), { className: "segmented" });
@@ -342,12 +412,11 @@ export function createTemplatesView({ labelSize, onShow, onSaved, onPrint, onPre
       ["end", "Right"],
     ]) {
       const label = document.createElement("label");
-      // Each part's radios are their own group.
       const radio = Object.assign(document.createElement("input"), {
         type: "radio",
-        name: `align-${row}-${position}`,
+        name: "align",
         value,
-        checked: block.align === value,
+        checked: part.align === value,
       });
       radio.dataset.setting = "align";
       label.append(radio, Object.assign(document.createElement("span"), { textContent: name }));
@@ -363,41 +432,39 @@ export function createTemplatesView({ labelSize, onShow, onSaved, onPrint, onPre
       addHeading.hidden = true;
       heading.focus();
     });
-    headingLabel.hidden = headingPair.hidden = !block.heading;
-    addHeading.hidden = Boolean(block.heading);
+    headingLabel.hidden = headingPair.hidden = !part.heading;
+    addHeading.hidden = Boolean(part.heading);
     const grid = Object.assign(document.createElement("div"), { className: "part-grid" });
     grid.append(
       headingLabel,
       headingPair,
-      labelFor("Text", `${id}-text`, text),
-      pair(text, select(sizes, names, block.size, "size", "Text size")),
-      line(align, checkbox("bold", block.bold, "Bold"), addHeading),
+      labelFor("Text", "cell-text", text),
+      pair(text, select(sizes, names, part.size, "size", "Text size")),
+      line(align, checkbox("bold", part.bold, "Bold"), addHeading),
     );
     return grid;
   }
 
   /**
-   * @param {ImageBlock} block
-   * @param {number} row
-   * @param {number} position
-   * @param {string} id
+   * @param {ImagePart} part
    * @returns {HTMLElement[]}
    */
-  function imageControls(block, row, position, id) {
+  function imageControls(part) {
+    const path = selected;
     const drop = Object.assign(document.createElement("div"), { className: "image-drop part-image" });
     const choose = Object.assign(document.createElement("button"), {
       type: "button",
       className: "button small",
-      textContent: block.image ? "Replace" : "Choose image",
+      textContent: part.image ? "Replace" : "Choose image",
     });
     choose.addEventListener("click", () => {
-      pendingImage = { row, position };
+      pendingImage = path;
       ui.imageFile.click();
     });
-    if (block.image) {
+    if (part.image) {
       const thumbnail = Object.assign(document.createElement("img"), { className: "part-thumb", alt: "" });
       tokenStore
-        .getImage(block.image.id)
+        .getImage(part.image.id)
         .then((blob) => {
           if (!(blob instanceof Blob)) return;
           thumbnail.src = URL.createObjectURL(blob);
@@ -412,8 +479,8 @@ export function createTemplatesView({ labelSize, onShow, onSaved, onPrint, onPre
         textContent: "Remove image",
       });
       remove.addEventListener("click", () => {
-        updateBlock(row, position, (b) => ({ ...b, image: undefined }));
-        showParts();
+        setPart(path, { ...part, image: undefined });
+        showCell();
       });
       drop.append(thumbnail, choose, remove);
     } else {
@@ -431,56 +498,46 @@ export function createTemplatesView({ labelSize, onShow, onSaved, onPrint, onPre
       event.preventDefault();
       drop.classList.remove("dragging");
       const [file] = event.dataTransfer?.files ?? [];
-      if (file) useImage(file, row, position);
+      if (file) useImage(file, path);
     });
-    const widths = /** @type {(keyof typeof IMAGE_WIDTHS)[]} */ (Object.keys(IMAGE_WIDTHS));
-    const width = select(
-      widths,
-      widths.map((w) => IMAGE_WIDTHS[w].name),
-      block.width,
-      "width",
-    );
-    const kind = select(["logo", "photo"], ["Logo, crisp", "Photo, dithered"], block.treatment, "treatment");
-    const show = select(["fit", "fill"], ["Whole image", "Fill the box"], block.show, "show");
+    const kind = select(["logo", "photo"], ["Logo, crisp", "Photo, dithered"], part.treatment, "treatment");
+    const show = select(["fit", "fill"], ["Whole image", "Fill the cell"], part.show, "show");
     const turns = /** @type {(keyof typeof TURNS)[]} */ (Object.keys(TURNS));
     const turn = select(
       turns,
       turns.map((t) => TURNS[t].name),
-      block.turn ?? "none",
+      part.turn ?? "none",
       "turn",
     );
     const grid = Object.assign(document.createElement("div"), { className: "part-grid" });
     grid.append(
-      labelFor("Width", `${id}-width`, width),
-      width,
-      labelFor("Kind", `${id}-kind`, kind),
+      labelFor("Kind", "cell-kind-of-image", kind),
       kind,
-      labelFor("Show", `${id}-show`, show),
+      labelFor("Show", "cell-show", show),
       show,
-      labelFor("Turn", `${id}-turn`, turn),
+      labelFor("Turn", "cell-turn", turn),
       turn,
     );
     return [drop, grid];
   }
 
-  /** The block waiting for the file being chosen. @type {{ row: number, position: number } | undefined} */
+  /** The cell waiting for the file being chosen. @type {Path | undefined} */
   let pendingImage;
 
   ui.imageFile.addEventListener("change", () => {
     const [file] = ui.imageFile.files ?? [];
     ui.imageFile.value = "";
-    if (file && pendingImage) useImage(file, pendingImage.row, pendingImage.position);
+    if (file && pendingImage) useImage(file, pendingImage);
     pendingImage = undefined;
   });
 
   /**
-   * Saves an image in this browser and puts it in a block. Its size is kept with the block so the
+   * Saves an image in this browser and puts it in a cell. Its size is kept with the part so the
    * label can be laid out before the image is loaded.
    * @param {File} file
-   * @param {number} row
-   * @param {number} position
+   * @param {Path} path
    */
-  async function useImage(file, row, position) {
+  async function useImage(file, path) {
     if (!file.type.startsWith("image/")) {
       showProblem(ui.status, "That file isn't an image. Choose a JPEG, PNG, WebP or SVG image.");
       return;
@@ -505,49 +562,13 @@ export function createTemplatesView({ labelSize, onShow, onSaved, onPrint, onPre
       return;
     }
     ui.status.textContent = "";
-    updateBlock(row, position, (b) => ({ ...b, image: { id, ...size } }));
-    showParts();
-  }
-
-  for (const { name, make } of Object.values(PARTS)) {
-    const button = Object.assign(document.createElement("button"), {
-      type: "button",
-      className: "button small",
-      textContent: name,
-    });
-    button.setAttribute("aria-label", `Add ${name.toLowerCase()}`);
-    button.addEventListener("click", () => {
-      setRows([...template.rows, { blocks: [make()] }]);
-      const added = ui.parts.lastElementChild?.lastElementChild;
-      for (const control of added?.querySelectorAll("input, textarea, select, .button") ?? []) {
-        if (!(control instanceof HTMLElement) || !control.checkVisibility()) continue;
-        control.focus();
-        break;
-      }
-    });
-    ui.addPart.append(button);
+    const leaf = cellAt(template.cell, path);
+    if (isSplit(leaf) || leaf.part?.type !== "image") return;
+    setPart(path, { ...leaf.part, image: { id, ...size } });
+    if (samePath(path, selected)) showCell();
   }
 
   /* Elements */
-
-  /**
-   * @param {string} title
-   * @param {string} text
-   * @param {boolean} disabled
-   * @param {() => void} onClick
-   */
-  function tool(title, text, disabled, onClick) {
-    const button = Object.assign(document.createElement("button"), {
-      type: "button",
-      className: "text-button tool",
-      textContent: text,
-      title,
-      disabled,
-    });
-    button.setAttribute("aria-label", title);
-    button.addEventListener("click", onClick);
-    return button;
-  }
 
   /**
    * @param {string} value
@@ -713,12 +734,15 @@ export function createTemplatesView({ labelSize, onShow, onSaved, onPrint, onPre
     saveNow();
     template = next;
     editing = true;
+    selected = [];
+    changingLayout = false;
     ui.name.value = next.name;
     choice.orientation.value = next.orientation;
     choice.border.value = next.border;
     choice.margin.value = next.margin;
     choice.length.value = next.lengthMm ? "fixed" : "auto";
     choice.font.value = next.font ?? "sans";
+    choice.lines.value = next.lines ?? "none";
     ui.lengthMm.value = next.lengthMm ? String(next.lengthMm) : "";
     ui.lengthFixed.hidden = !next.lengthMm;
     showLengthField();
@@ -726,7 +750,8 @@ export function createTemplatesView({ labelSize, onShow, onSaved, onPrint, onPre
     delete ui.status.dataset.tone;
     ui.library.hidden = true;
     ui.editor.hidden = false;
-    showParts();
+    showMap();
+    showCell();
     showActions();
     onShow(design());
   }

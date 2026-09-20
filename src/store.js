@@ -1,5 +1,6 @@
 /** @import { Token } from "./designs.js" */
 /** @import { LabelTemplate } from "./labels/template.js" */
+import { upgradeTemplate } from "./labels/template.js";
 
 /** Named before the app was; renaming it would lose what people saved. */
 const DATABASE = "mtg-thermal-printer";
@@ -107,8 +108,8 @@ export const tokenStore = {
 
 /** Label templates of your own, saved in this browser's IndexedDB. */
 export const templateStore = {
-  /** @returns {Promise<LabelTemplate[]>} */
-  list: () => run("templates", "readonly", (store) => store.getAll()),
+  /** Every saved template, those from before templates had cells brought up to date. @returns {Promise<LabelTemplate[]>} */
+  list: async () => (await run("templates", "readonly", (store) => store.getAll())).map(upgradeTemplate),
 
   /** @param {LabelTemplate} template */
   save: (template) => run("templates", "readwrite", (store) => store.put(template)),

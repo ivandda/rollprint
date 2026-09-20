@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { STARTERS } from "../../src/labels/starters.js";
-import { fieldsOf, fill, firstValue, isBlank, sampleValues, textBlock } from "../../src/labels/template.js";
+import { fieldsOf, fill, firstValue, isBlank, sampleValues, textPart } from "../../src/labels/template.js";
 
 /** @type {import("../../src/labels/template.js").LabelTemplate} */
 const PRODUCT = {
@@ -10,10 +10,17 @@ const PRODUCT = {
   orientation: "portrait",
   border: "thin",
   margin: "m",
-  rows: [
-    { blocks: [textBlock({ heading: "{Product}", text: "Batch {Batch} · best before {Date}" })] },
-    { blocks: [textBlock({ text: "{Notes}" }), textBlock({ text: "Made by {Product} Co." })] },
-  ],
+  cell: {
+    split: "down",
+    share: 1 / 2,
+    first: { part: textPart({ heading: "{Product}", text: "Batch {Batch} · best before {Date}" }) },
+    second: {
+      split: "across",
+      share: 1 / 2,
+      first: { part: textPart({ text: "{Notes}" }) },
+      second: { part: textPart({ text: "Made by {Product} Co." }) },
+    },
+  },
 };
 
 test("fields come from placeholders once each, in order; a whole-text placeholder takes lines", () => {
@@ -26,10 +33,7 @@ test("fields come from placeholders once each, in order; a whole-text placeholde
 });
 
 test("a name used both alone and inside a line can hold lines", () => {
-  const template = {
-    ...PRODUCT,
-    rows: [{ blocks: [textBlock({ heading: "Re: {Notes}", text: "{Notes}" })] }],
-  };
+  const template = { ...PRODUCT, cell: { part: textPart({ heading: "Re: {Notes}", text: "{Notes}" }) } };
   assert.deepEqual(fieldsOf(template), [{ name: "Notes", multiline: true }]);
 });
 
@@ -52,11 +56,12 @@ test("a label is blank when every field is empty, never when there are no fields
   assert.equal(isBlank(PRODUCT, {}), true);
   assert.equal(isBlank(PRODUCT, { Notes: "  " }), true);
   assert.equal(isBlank(PRODUCT, { Date: "2026" }), false);
-  assert.equal(isBlank({ ...PRODUCT, rows: [{ blocks: [textBlock({ text: "Fixed" })] }] }, {}), false);
+  assert.equal(isBlank({ ...PRODUCT, cell: { part: textPart({ text: "Fixed" }) } }, {}), false);
+  assert.equal(isBlank({ ...PRODUCT, cell: {} }, {}), false);
 });
 
 test("a field named like something every object has is only a field", () => {
-  const t = { ...PRODUCT, rows: [{ blocks: [textBlock({ text: "{constructor} {toString}" })] }] };
+  const t = { ...PRODUCT, cell: { part: textPart({ text: "{constructor} {toString}" }) } };
   assert.equal(isBlank(t, {}), true);
   assert.equal(fill("{constructor} {toString}", {}), " ");
   assert.equal(firstValue(t, { toString: "x" }), "x");

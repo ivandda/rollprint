@@ -1,9 +1,9 @@
 /** @import { LabelTemplate, Values } from "../labels/template.js" */
 /** @import { Bitmap, Media } from "../printers/types.js" */
 /** @import { FontName } from "./fonts.js" */
-/** @import { LabelLayout, MeasureText, PlacedBlock } from "./label-layout.js" */
+/** @import { LabelLayout, MeasureText, PlacedPart } from "./label-layout.js" */
 
-import { BARCODE_HEIGHTS, isQuarterTurned, TURNS } from "../labels/template.js";
+import { isQuarterTurned, TURNS } from "../labels/template.js";
 import { QrCode } from "../vendor/qrcodegen.js";
 import { placeImage } from "./arrangement.js";
 import { barcodeModules, QUIET_ZONE } from "./barcode.js";
@@ -16,7 +16,6 @@ import { BORDERS, frameOf, isTurned, LEAST_MODULE_DOTS, layoutLabel } from "./la
 /** Blank modules around a QR code, so a scanner finds it. */
 const QR_QUIET_ZONE = 2;
 
-const DIVIDERS = { thin: 0.3, thick: 0.8 };
 const ROUNDED_RADIUS_MM = 2;
 /** Keeps a logo's anti-aliased edges, so thin lines still print. */
 const LOGO_THRESHOLD = 170;
@@ -79,11 +78,11 @@ export function labelLength(template, values, media) {
 export function renderLabel(template, values, media, { upright = false, images, tone = TONES.normal } = {}) {
   const layout = layoutOn(template, values, media);
   const drawn = draw(layout, template);
-  for (const placed of layout.blocks) {
-    const { block } = placed;
-    if (block.type !== "image" || !block.image) continue;
-    const image = images?.get(block.image.id);
-    if (image) pasteBitmap(drawn, renderImage(image, placed, block, tone), placed.x, placed.y);
+  for (const placed of layout.parts) {
+    const { part } = placed;
+    if (part.type !== "image" || !part.image) continue;
+    const image = images?.get(part.image.id);
+    if (image) pasteBitmap(drawn, renderImage(image, placed, part, tone), placed.x, placed.y);
   }
   if (upright) return drawn;
   const turned = isTurned(template, media) ? rotateBitmap(drawn) : drawn;
@@ -134,14 +133,15 @@ function draw(layout, template) {
   context.beginPath();
   context.rect(edge, edge, width - 2 * edge, height - 2 * edge);
   context.clip();
-  for (const placed of layout.blocks) drawBlock(context, placed, mm, template);
+  for (const line of layout.lines) context.fillRect(line.x, line.y, line.width, line.height);
+  for (const placed of layout.parts) drawPart(context, placed, template);
   return thresholdToBitmap(context.getImageData(0, 0, width, height), TEXT_THRESHOLD);
 }
 
 /**
  * A QR code in its square, as large as whole modules allow, in the middle.
  * @param {OffscreenCanvasRenderingContext2D} context
- * @param {PlacedBlock} placed
+ * @param {PlacedPart} placed
  * @param {string} content
  */
 function drawQr(context, placed, content) {
@@ -160,10 +160,10 @@ function drawQr(context, placed, content) {
 }
 
 /**
- * A barcode's bars at the widest whole-dot module its block allows, in the middle, with its text
+ * A barcode's bars at the widest whole-dot module its cell allows, in the middle, with its text
  * under it.
  * @param {OffscreenCanvasRenderingContext2D} context
- * @param {PlacedBlock} placed
+ * @param {PlacedPart} placed
  * @param {number} barHeight
  */
 function drawBarcode(context, placed, barHeight) {
@@ -190,11 +190,11 @@ function drawBarcode(context, placed, barHeight) {
 }
 
 /**
- * An image in its box, turned as its block asks: the whole of it, or the box filled and the image
+ * An image in its box, turned as its part asks: the whole of it, or the box filled and the image
  * cropped in the middle. A logo is thresholded so its lines stay crisp; a photo is dithered.
  * @param {ImageBitmap} image
- * @param {PlacedBlock} box
- * @param {import("../labels/template.js").ImageBlock} block
+ * @param {PlacedPart} box
+ * @param {import("../labels/template.js").ImagePart} block
  * @param {{ black: number, white: number, gamma: number }} tone
  */
 function renderImage(image, box, block, tone) {
@@ -216,36 +216,26 @@ function renderImage(image, box, block, tone) {
 }
 
 /**
+ * Everything but an image, which is pasted on afterwards once it is loaded.
  * @param {OffscreenCanvasRenderingContext2D} context
- * @param {PlacedBlock} placed
- * @param {number} mm
+ * @param {PlacedPart} placed
  * @param {LabelTemplate} template
  */
-function drawBlock(context, placed, mm, template) {
-  const { block } = placed;
-  if (block.type === "space" || block.type === "image") return;
-  if (block.type === "qr") {
+function drawPart(context, placed, template) {
+  const { part } = placed;
+  if (part.type === "image") return;
+  if (part.type === "qr") {
     drawQr(context, placed, placed.code ?? "");
     return;
   }
-  if (block.type === "barcode") {
-    drawBarcode(context, placed, BARCODE_HEIGHTS[block.height] * mm);
-    return;
-  }
-  if (block.type === "divider") {
-    const thickness = Math.max(1, Math.round(DIVIDERS[block.weight] * mm));
-    context.fillRect(
-      placed.x,
-      Math.round(placed.y + (placed.height - thickness) / 2),
-      placed.width,
-      thickness,
-    );
+  if (part.type === "barcode") {
+    drawBarcode(context, placed, placed.barHeight ?? 0);
     return;
   }
   const x = { start: placed.x, center: placed.x + placed.width / 2, end: placed.x + placed.width }[
-    block.align
+    part.align
   ];
-  context.textAlign = block.align === "start" ? "left" : block.align === "end" ? "right" : "center";
+  context.textAlign = part.align === "start" ? "left" : part.align === "end" ? "right" : "center";
   let y = placed.y;
   for (const part of [placed.heading, placed.text]) {
     if (!part) continue;

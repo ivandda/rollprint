@@ -1,4 +1,5 @@
 /** @import { Design } from "./designs.js" */
+import { upgradeTemplate } from "./labels/template.js";
 import { localStore } from "./storage.js";
 
 /**
@@ -26,7 +27,7 @@ export class PrintList extends EventTarget {
     this.#storage = storage;
     try {
       const saved = JSON.parse(storage?.getItem(STORAGE_KEY) ?? "[]");
-      if (Array.isArray(saved)) this.items = saved.filter(isItem);
+      if (Array.isArray(saved)) this.items = saved.filter(isItem).map(upgraded);
     } catch {
       // A damaged list starts empty.
     }
@@ -85,6 +86,16 @@ export class PrintList extends EventTarget {
     this.dispatchEvent(new Event("change"));
   }
 }
+
+/**
+ * An item saved before label templates had cells, brought up to date.
+ * @param {PrintListItem} item
+ * @returns {PrintListItem}
+ */
+const upgraded = (item) =>
+  item.design.type === "label"
+    ? { ...item, design: { ...item.design, template: upgradeTemplate(item.design.template) } }
+    : item;
 
 /** @param {any} item */
 const isItem = (item) =>

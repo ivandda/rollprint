@@ -1,13 +1,11 @@
 /** @import { LabelDesign } from "../../designs.js" */
 /** @import { PanelHooks, Source } from "./source.js" */
 import { isTurned } from "../../imaging/label-layout.js";
-import { firstValue, isBlank } from "../../labels/template.js";
+import { firstValue, isBlank, partsOf } from "../../labels/template.js";
 
 /** Whether the darkness choice changes anything: only photos are dithered. @param {LabelDesign} design */
 const hasPhoto = (design) =>
-  design.template.rows.some(({ blocks }) =>
-    blocks.some((block) => block.type === "image" && block.treatment === "photo" && block.image),
-  );
+  partsOf(design.template).some((part) => part.type === "image" && part.treatment === "photo" && part.image);
 
 /**
  * A template of your own on the label, filled in.
