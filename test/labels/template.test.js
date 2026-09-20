@@ -55,6 +55,13 @@ test("a label is blank when every field is empty, never when there are no fields
   assert.equal(isBlank({ ...PRODUCT, rows: [{ blocks: [textBlock({ text: "Fixed" })] }] }, {}), false);
 });
 
+test("a field named like something every object has is only a field", () => {
+  const t = { ...PRODUCT, rows: [{ blocks: [textBlock({ text: "{constructor} {toString}" })] }] };
+  assert.equal(isBlank(t, {}), true);
+  assert.equal(fill("{constructor} {toString}", {}), " ");
+  assert.equal(firstValue(t, { toString: "x" }), "x");
+});
+
 test("the first value stands for the label, on one line", () => {
   assert.equal(firstValue(PRODUCT, { Batch: "7" }), "7");
   assert.equal(firstValue(PRODUCT, { Notes: "line one\nline two" }), "line one");

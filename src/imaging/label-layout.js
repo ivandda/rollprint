@@ -1,7 +1,7 @@
 /** @import { Block, LabelTemplate, TextSize, Values } from "../labels/template.js" */
 /** @import { Media } from "../printers/types.js" */
 import { BARCODE_HEIGHTS, fill, IMAGE_WIDTHS, TEXT_SIZES } from "../labels/template.js";
-import { barcodeModules, code128 } from "./barcode.js";
+import { barcodeModules, code128, code128Text } from "./barcode.js";
 
 /** Room between the border and the content, in millimetres. */
 export const MARGINS = { s: 1.5, m: 3, l: 5 };
@@ -46,8 +46,8 @@ const BARCODE_TEXT_LINE = 1.4;
 /**
  * A block where it goes. `room` is the width it may take, infinite when the label is as wide as
  * its content; `width` is what it takes until the rows are laid out, then its share of the row.
- * An image or QR code keeps the width its block asks for. A barcode carries its bar widths and
- * the text under it, if any.
+ * An image or QR code keeps the width its block asks for, and so does a barcode whose bars are
+ * wider than its row. A barcode carries its bar widths and the text under it, if any.
  * @typedef {Rect & {
  *   block: Block,
  *   room: number,
@@ -175,14 +175,8 @@ export function layoutLabel(template, values, frame, dotsPerMm, measure) {
     }
   }
 
-  const width = autoWidth ? Math.round(content.width + 2 * inset) : frame.width;
-  const height = autoHeight
-    ? clamp(
-        Math.round(content.height + 2 * inset),
-        Math.round(AUTO_LENGTH_MM.min * mm),
-        Math.round(AUTO_LENGTH_MM.max * mm),
-      )
-    : frame.height;
+  const width = autoWidth ? autoLength(content.width + 2 * inset, mm) : frame.width;
+  const height = autoHeight ? autoLength(content.height + 2 * inset, mm) : frame.height;
   const left = inset;
   const top = Math.round(inset + Math.max(0, (height - 2 * inset - content.height) / 2));
   for (const block of content.blocks) {
@@ -217,13 +211,16 @@ function placeBlock(block, values, width, dots, measure, mm) {
     if (!content) return placed;
     const bars = code128(content);
     const size = TEXT_SIZES.xs.mm * mm;
-    const caption = block.text ? { size, bold: false, lines: [content] } : undefined;
+    const caption = block.text ? { size, bold: false, lines: [code128Text(content)] } : undefined;
+    // As wide as its bars at the smallest module that scans; a wider block spreads them. A row with
+    // less room can't make them narrower, so they keep their width and run over its edge in plain sight.
+    const least = barcodeModules(bars) * LEAST_MODULE_DOTS;
     return {
       ...placed,
       bars,
       caption,
-      // As wide as its bars at the smallest module that scans; a wider block spreads them.
-      width: barcodeModules(bars) * LEAST_MODULE_DOTS,
+      fixed: least > width,
+      width: least,
       height: BARCODE_HEIGHTS[block.height] * mm + (caption ? size * BARCODE_TEXT_LINE : 0),
     };
   }
@@ -356,6 +353,14 @@ const hasFitText = ({ heading, text }) => Boolean((heading && !heading.size) || 
  * @param {number} max
  */
 const clamp = (value, min, max) => Math.min(Math.max(value, min), max);
+
+/**
+ * How long a label on a continuous roll is for content of a length, in dots: the same, within limits.
+ * @param {number} dots
+ * @param {number} mm  Dots per millimetre.
+ */
+const autoLength = (dots, mm) =>
+  clamp(Math.round(dots), Math.round(AUTO_LENGTH_MM.min * mm), Math.round(AUTO_LENGTH_MM.max * mm));
 
 /**
  * How long the label is along the roll, in dots: what the template fixes, else what the paper has,

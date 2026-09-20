@@ -1,6 +1,14 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { AUTO_LENGTH_MM, frameOf, isTurned, layoutLabel, MARGINS } from "../../src/imaging/label-layout.js";
+import { barcodeModules } from "../../src/imaging/barcode.js";
+import {
+  AUTO_LENGTH_MM,
+  frameOf,
+  isTurned,
+  LEAST_MODULE_DOTS,
+  layoutLabel,
+  MARGINS,
+} from "../../src/imaging/label-layout.js";
 import {
   BARCODE_HEIGHTS,
   barcodeBlock,
@@ -144,6 +152,19 @@ test("a continuous label is as long as its content, within limits", () => {
   assert.equal(layout.height, Math.round(6 * TEXT_SIZES.l.mm * DPMM * 1.2 + 2 * inset));
 });
 
+test("a label as wide as its content keeps within the same limits", () => {
+  const short = template({ rows: [{ blocks: [textBlock({ text: "Hi", size: "s" })] }] });
+  assert.equal(
+    layoutLabel(short, {}, { width: 0, height: 696 }, DPMM, measure).width,
+    Math.round(AUTO_LENGTH_MM.min * DPMM),
+  );
+  const long = template({ rows: [{ blocks: [textBlock({ text: "word ".repeat(200), size: "xl" })] }] });
+  assert.equal(
+    layoutLabel(long, {}, { width: 0, height: 696 }, DPMM, measure).width,
+    Math.round(AUTO_LENGTH_MM.max * DPMM),
+  );
+});
+
 test("a label as wide as its content gets the widest row, and other rows stretch to it", () => {
   const t = template({
     margin: "s",
@@ -262,4 +283,17 @@ test("a barcode is as wide as its row, as tall as chosen plus its text, and know
   const wide = layoutLabel(t, { Code: "AB-123" }, { width: 0, height: 696 }, DPMM, measure);
   assert.ok(wide.blocks[0].width > 0);
   assert.equal(wide.width, wide.blocks[0].width + 2 * Math.round(MARGINS.s * DPMM));
+});
+
+test("a barcode too wide for its row keeps the width of its bars, and its text says what they say", () => {
+  const t = template({
+    margin: "s",
+    rows: [{ blocks: [barcodeBlock({ content: "{Code}", height: "m", text: true })] }],
+  });
+  const code = "ABCDEFGHIJKLMNOPQRSTUVWXYZ-0123456789-café";
+  const [bar] = layoutLabel(t, { Code: code }, { width: 300, height: 400 }, DPMM, measure).blocks;
+  assert.ok(bar.bars);
+  assert.equal(bar.width, barcodeModules(bar.bars) * LEAST_MODULE_DOTS);
+  assert.ok(bar.width > 300);
+  assert.deepEqual(bar.caption?.lines, ["ABCDEFGHIJKLMNOPQRSTUVWXYZ-0123456789-caf?"]);
 });

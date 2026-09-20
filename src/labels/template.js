@@ -136,8 +136,12 @@ const isOnlyPlaceholder = (text) => /^\s*\{[^{}]+\}\s*$/.test(text);
  * @param {Values} values
  */
 export function fill(text, values) {
-  return text.replace(PLACEHOLDER, (_, name) => values[name.trim()] ?? "");
+  return text.replace(PLACEHOLDER, (_, name) => fieldValue(values, name.trim()));
 }
+
+/** A field's value, or nothing; never what every object inherits, like `constructor`.
+ * @param {Values} values @param {string} name */
+const fieldValue = (values, name) => (Object.hasOwn(values, name) ? values[name] : "");
 
 /**
  * Values that show a template as its designer sees it: each field says its own name.
@@ -155,7 +159,7 @@ export function sampleValues(template) {
  */
 export function isBlank(template, values) {
   const fields = fieldsOf(template);
-  return fields.length > 0 && fields.every(({ name }) => !(values[name] ?? "").trim());
+  return fields.length > 0 && fields.every(({ name }) => !fieldValue(values, name).trim());
 }
 
 /**
@@ -166,7 +170,7 @@ export function isBlank(template, values) {
  */
 export function firstValue(template, values) {
   for (const { name } of fieldsOf(template)) {
-    const value = (values[name] ?? "").trim().split("\n")[0];
+    const value = fieldValue(values, name).trim().split("\n")[0];
     if (value) return value;
   }
   return "";
