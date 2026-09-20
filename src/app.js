@@ -13,6 +13,7 @@ import { createModes } from "./ui/modes.js";
 import { createPrintListDialog } from "./ui/print-list-dialog.js";
 import { bindPrinterButton } from "./ui/printer-button.js";
 import { createSearch } from "./ui/search.js";
+import { toast } from "./ui/toast.js";
 import { createTokenEditor } from "./ui/token-editor.js";
 import { createViews } from "./ui/views.js";
 
@@ -53,8 +54,13 @@ const panel = createLabelPanel({
     if (switchingLabels || result === "dropped") return;
     // Escape ends the edit while the key is still being handled, so the sheet is opened after it.
     // Opening it inside the keypress would let the same Escape close it again.
-    setTimeout(() => list.open(id, ENDINGS[result]), 0);
+    setTimeout(() => {
+      list.open(id);
+      const ending = ENDINGS[result];
+      if (ending) toast(ending);
+    }, 0);
   },
+  openList: () => list.open(),
 });
 const tokens = createTokenEditor({
   printList,
@@ -89,6 +95,7 @@ createDeck({
     panel.showCard(card);
     views.openLabel();
   },
+  openList: () => list.open(),
 });
 const list = createPrintListDialog({
   printer,
@@ -118,6 +125,13 @@ const list = createPrintListDialog({
 const back = element("#back", HTMLButtonElement);
 
 bindPrinterButton(printer, panel.showStatus);
+
+let printerWasReady = false;
+printer.addEventListener("change", () => {
+  const { state } = printer;
+  if (state.kind === "ready" && !printerWasReady) toast(`${state.printer} connected: ${state.media.name}.`);
+  printerWasReady = state.kind === "ready";
+});
 
 printer.restore();
 if (document.body.dataset.mode === "find") openLinkedCard();

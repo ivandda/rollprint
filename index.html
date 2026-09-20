@@ -53,18 +53,6 @@
           </form>
         </search>
 
-        <div id="suggestions" class="suggestions">
-          <p>Common tokens:</p>
-          <button class="button small" type="button">Treasure</button>
-          <button class="button small" type="button">Clue</button>
-          <button class="button small" type="button">Food</button>
-          <button class="button small" type="button">Goblin</button>
-          <button class="button small" type="button">Soldier</button>
-          <button class="button small" type="button">Zombie</button>
-          <button class="button small" type="button">Spirit</button>
-          <button class="button small" type="button">Saproling</button>
-        </div>
-
         <p id="results-status" class="results-status" aria-live="polite"></p>
         <ul id="results" class="results"></ul>
         <button id="more" class="button more" type="button" hidden>Show more</button>
@@ -201,14 +189,12 @@
           <p id="deck-both-sides" class="hint" hidden></p>
           <div class="deck-actions">
             <button id="add-deck-cards" class="button" type="button">Add cards to the print list</button>
-            <p id="deck-cards-added" class="hint" aria-live="polite"></p>
           </div>
         </section>
         <section id="deck-tokens-group" class="deck-group" aria-labelledby="deck-tokens-title" hidden>
           <h3 id="deck-tokens-title" class="visually-hidden">Tokens</h3>
           <div class="deck-actions">
             <button id="add-deck-tokens" class="button" type="button">Add all tokens to the print list</button>
-            <p id="deck-tokens-added" class="hint" aria-live="polite"></p>
           </div>
           <ul id="deck-tokens" class="results"></ul>
         </section>
@@ -323,6 +309,8 @@
         <a href="https://github.com/ivandda/rollprint">Source code</a>
       </p>
     </footer>
+
+    <div id="toasts" class="toasts" popover="manual"></div>
 
     <dialog id="print-list" class="sheet" aria-labelledby="print-list-title">
       <div class="sheet-content">

@@ -4,9 +4,10 @@
 /** @import { Bitmap, Media } from "../printers/types.js" */
 /** @import { LabelSize } from "./label-size.js" */
 import { describeDesign, pageCount, paperLength, renderDesign } from "../designs.js";
-import { drawBitmap, element, problemMessage, showMessage } from "./dom.js";
+import { drawBitmap, element, problemMessage, showProblem } from "./dom.js";
 import { preparePrinter } from "./printer-button.js";
 import { bindStepper } from "./stepper.js";
+import { toast } from "./toast.js";
 
 /**
  * The print list, in a side sheet: saved items with their copies, printed together in one job.
@@ -42,12 +43,9 @@ export function createPrintListDialog({ printer, labelSize, printList, onEdit })
 
   ui.open.addEventListener("click", () => open());
 
-  /**
-   * @param {string} [focusId]  A row to return to, after its label was changed.
-   * @param {string} [message]
-   */
-  function open(focusId, message) {
-    ui.status.textContent = message ?? "";
+  /** @param {string} [focusId]  A row to return to, after its label was changed. */
+  function open(focusId) {
+    ui.status.textContent = "";
     ui.dialog.showModal();
     showItems();
     const edit = focusId ? rows.get(focusId)?.row.querySelector(".edit") : undefined;
@@ -162,7 +160,7 @@ export function createPrintListDialog({ printer, labelSize, printList, onEdit })
     ui.status.textContent = "";
     const advice = await preparePrinter(printer);
     if (printer.state.kind !== "ready") {
-      showMessage(ui.status, advice.text, advice.link);
+      showProblem(ui.status, advice.text, advice.link);
       return;
     }
 
@@ -177,9 +175,9 @@ export function createPrintListDialog({ printer, labelSize, printList, onEdit })
         for (let copy = 0; copy < item.copies; copy++) pages.push(...rendered);
       }
       await printer.print(pages);
-      ui.status.textContent = pages.length === 1 ? "Printed." : `Printed ${pages.length} pages.`;
+      toast(pages.length === 1 ? "Printed." : `Printed ${pages.length} pages.`);
     } catch (error) {
-      ui.status.textContent = problemMessage(error);
+      showProblem(ui.status, problemMessage(error));
     } finally {
       printing = false;
       updatePrintAll();

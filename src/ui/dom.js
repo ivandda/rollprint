@@ -66,8 +66,11 @@ export function problemMessage(error) {
  * @param {HTMLElement} target
  * @param {string} text
  * @param {{ href: string, text: string }} [link]
+ * @param {"problem"} [tone]  A problem is shown on a coloured background.
  */
-export function showMessage(target, text, link) {
+export function showMessage(target, text, link, tone) {
+  if (tone) target.dataset.tone = tone;
+  else delete target.dataset.tone;
   if (!link) {
     target.textContent = text;
     return;
@@ -79,4 +82,14 @@ export function showMessage(target, text, link) {
     rel: "noopener",
   });
   target.replaceChildren(text, " ", anchor);
+}
+
+/**
+ * Shows something that went wrong where the user was working, on a coloured background.
+ * @param {HTMLElement} target
+ * @param {string} text
+ * @param {{ href: string, text: string }} [link]
+ */
+export function showProblem(target, text, link) {
+  showMessage(target, text, link, "problem");
 }

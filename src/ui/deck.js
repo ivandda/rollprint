@@ -6,8 +6,9 @@ import { deckLinkSite, findDeckCards, findDeckTokens, isBasicLand, parseDecklist
 import { DARKNESS } from "../designs.js";
 import { MAX_COPIES } from "../print-list.js";
 import { cardFaces, pickCard, ScryfallError } from "../scryfall/client.js";
-import { cardThumbnail, element } from "./dom.js";
+import { cardThumbnail, element, showMessage, showProblem } from "./dom.js";
 import { readSetting, writeSetting } from "./settings.js";
+import { toast } from "./toast.js";
 
 /**
  * The Deck tab: a pasted decklist, adding its cards to the print list, and the tokens, emblems and
@@ -16,8 +17,9 @@ import { readSetting, writeSetting } from "./settings.js";
  * @param {ScryfallClient} options.scryfall
  * @param {PrintList} options.printList
  * @param {(card: ScryfallCard) => void} options.onSelect
+ * @param {() => void} options.openList  Opens the print list, from the toast after adding to it.
  */
-export function createDeck({ scryfall, printList, onSelect }) {
+export function createDeck({ scryfall, printList, onSelect, openList }) {
   const ui = {
     form: element("#deck-form", HTMLFormElement),
     decklist: element("#decklist", HTMLTextAreaElement),
@@ -33,10 +35,8 @@ export function createDeck({ scryfall, printList, onSelect }) {
     basicsLabel: element("#basics-label", HTMLElement),
     bothSides: element("#deck-both-sides", HTMLElement),
     addCards: element("#add-deck-cards", HTMLButtonElement),
-    cardsAdded: element("#deck-cards-added", HTMLElement),
     tokensGroup: element("#deck-tokens-group", HTMLElement),
     addTokens: element("#add-deck-tokens", HTMLButtonElement),
-    tokensAdded: element("#deck-tokens-added", HTMLElement),
     tokens: element("#deck-tokens", HTMLUListElement),
   };
   /** @type {DeckCard[]} */
@@ -72,15 +72,17 @@ export function createDeck({ scryfall, printList, onSelect }) {
       const design = designOf(card, true);
       for (let left = count; left > 0; left -= MAX_COPIES) printList.add(design, Math.min(left, MAX_COPIES));
     }
-    ui.cardsAdded.textContent = `Added ${cardCount(total(printed))} to the print list.`;
+    toast(`Added ${cardCount(total(printed))} to the print list.`, { text: "Open", onClick: openList });
   });
 
   ui.addTokens.addEventListener("click", () => {
     for (const { card } of tokens) printList.add(designOf(card, false), 1);
-    ui.tokensAdded.textContent =
+    toast(
       tokens.length === 1
         ? "Added 1 token to the print list. Change its copies there."
-        : `Added ${tokens.length} tokens to the print list. Change their copies there.`;
+        : `Added ${tokens.length} tokens to the print list. Change their copies there.`,
+      { text: "Open", onClick: openList },
+    );
   });
 
   async function lookUpDeck() {
@@ -95,19 +97,21 @@ export function createDeck({ scryfall, printList, onSelect }) {
 
     const site = deckLinkSite(text);
     if (site) {
-      ui.status.textContent =
+      showProblem(
+        ui.status,
         site === "archidekt.com"
           ? "Archidekt doesn't let other sites open its decks. Use Export on the deck, copy the text and paste it here."
-          : "Links can't be opened here. Export the deck as text on the site and paste it here.";
+          : "Links can't be opened here. Export the deck as text on the site and paste it here.",
+      );
       return;
     }
     const entries = parseDecklist(text);
     if (entries.length === 0) {
-      ui.status.textContent = "Paste a decklist first, with one card on each line.";
+      showProblem(ui.status, "Paste a decklist first, with one card on each line.");
       return;
     }
 
-    ui.status.textContent = `Looking up ${cardCount(entries.reduce((sum, entry) => sum + entry.count, 0))}…`;
+    showMessage(ui.status, `Looking up ${cardCount(entries.reduce((sum, entry) => sum + entry.count, 0))}…`);
     ui.lookUp.disabled = true;
     try {
       const found = await findDeckCards(scryfall, entries);
@@ -120,22 +124,20 @@ export function createDeck({ scryfall, printList, onSelect }) {
       cards = found.cards;
       tokens = made;
       const listed = cardCount(total(cards));
-      ui.status.textContent =
-        cards.length === 0
-          ? "None of these cards were found."
-          : tokens.length === 0
-            ? `${listed}. No tokens, emblems or game cards.`
-            : "";
+      if (cards.length === 0) showProblem(ui.status, "None of these cards were found.");
+      else showMessage(ui.status, tokens.length === 0 ? `${listed}. No tokens, emblems or game cards.` : "");
       ui.missing.hidden = found.missing.length === 0;
-      ui.missing.textContent = `Not found, check the spelling: ${found.missing.join(", ")}.`;
+      showProblem(ui.missing, `Not found, check the spelling: ${found.missing.join(", ")}.`);
       showCards();
       showTokens();
     } catch (error) {
       if (id !== searchId) return;
-      ui.status.textContent =
+      showProblem(
+        ui.status,
         error instanceof ScryfallError
           ? error.message
-          : "Couldn't reach Scryfall. Check your connection and try again.";
+          : "Couldn't reach Scryfall. Check your connection and try again.",
+      );
     } finally {
       if (id === searchId) ui.lookUp.disabled = false;
     }
@@ -159,13 +161,11 @@ export function createDeck({ scryfall, printList, onSelect }) {
         : `${twoSided} double-faced cards print both sides.`;
     ui.addCards.textContent = `Add ${cardCount(total(printed))} to the print list`;
     ui.addCards.disabled = printed.length === 0;
-    ui.cardsAdded.textContent = "";
     showView();
   }
 
   function showTokens() {
     ui.tokens.replaceChildren(...tokens.map(tokenItem));
-    ui.tokensAdded.textContent = "";
     showView();
   }
 
