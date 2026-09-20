@@ -93,3 +93,30 @@ export function showMessage(target, text, link, tone) {
 export function showProblem(target, text, link) {
   showMessage(target, text, link, "problem");
 }
+
+/**
+ * Keeps a popover menu by the button that opens it, wherever the page has put the button, even as
+ * the page scrolls.
+ * @param {HTMLElement} menu
+ * @param {HTMLElement} button
+ */
+export function dropDown(menu, button) {
+  const place = () => {
+    const rect = button.getBoundingClientRect();
+    // Under the button, or over it when the screen ends too soon below.
+    const below = rect.bottom + 4;
+    const top = below + menu.offsetHeight > innerHeight ? rect.top - menu.offsetHeight - 4 : below;
+    menu.style.top = `${Math.max(8, top)}px`;
+    menu.style.left = `${Math.max(8, Math.min(rect.left, innerWidth - menu.offsetWidth - 8))}px`;
+  };
+  menu.addEventListener("toggle", (event) => {
+    if (event instanceof ToggleEvent && event.newState === "open") place();
+  });
+  addEventListener(
+    "scroll",
+    () => {
+      if (menu.matches(":popover-open")) place();
+    },
+    { passive: true },
+  );
+}

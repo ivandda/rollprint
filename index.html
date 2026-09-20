@@ -19,7 +19,7 @@
           <span id="mode-name">Cards</span>
         </button>
       </div>
-      <div id="mode-menu" class="mode-menu" popover>
+      <div id="mode-menu" class="menu mode-menu" popover>
         <button type="button" data-space="cards">
           <span class="mode-option-name">Cards</span>
           <span class="mode-option-detail">MTG Thermal Printer: cards, tokens, markers and decks</span>
@@ -230,72 +230,84 @@
             <button id="to-templates" class="text-button back-link" type="button">My templates</button>
             <p id="template-save-state" class="save-state"></p>
           </div>
-          <form id="template-form" class="form-grid" novalidate>
+          <form id="template-form" class="designer" novalidate>
             <div class="form-field">
               <label for="template-name">Name</label>
               <input id="template-name" name="name" autocomplete="off">
             </div>
-            <div class="form-field">
-              <label for="template-font">Typeface</label>
-              <select id="template-font" name="font">
-                <option value="sans">Sans</option>
-                <option value="serif">Serif</option>
-                <option value="mono">Mono</option>
-                <option value="condensed">Condensed</option>
-              </select>
-            </div>
-            <fieldset class="form-field">
-              <legend>Orientation</legend>
-              <div class="segmented">
-                <label><input type="radio" name="orientation" value="landscape" checked><span>Landscape</span></label>
-                <label><input type="radio" name="orientation" value="portrait"><span>Portrait</span></label>
-              </div>
-              <p class="hint">Landscape reads along the label's longer side: along a continuous roll, or across a wide short label.</p>
-            </fieldset>
-            <fieldset class="form-field">
-              <legend>Border</legend>
-              <div class="segmented">
-                <label><input type="radio" name="border" value="none" checked><span>None</span></label>
-                <label><input type="radio" name="border" value="thin"><span>Thin</span></label>
-                <label><input type="radio" name="border" value="thick"><span>Thick</span></label>
-                <label><input type="radio" name="border" value="rounded"><span>Rounded</span></label>
-              </div>
-            </fieldset>
-            <fieldset class="form-field">
-              <legend>Margins</legend>
-              <div class="segmented">
-                <label><input type="radio" name="margin" value="s"><span>Small</span></label>
-                <label><input type="radio" name="margin" value="m" checked><span>Medium</span></label>
-                <label><input type="radio" name="margin" value="l"><span>Large</span></label>
-              </div>
-            </fieldset>
-            <fieldset id="length-field" class="form-field">
-              <legend>Length on a continuous roll</legend>
-              <div class="segmented">
-                <label><input type="radio" name="length" value="auto" checked><span>As long as the content</span></label>
-                <label><input type="radio" name="length" value="fixed"><span>Fixed</span></label>
-              </div>
-              <div class="length-input">
-                <input id="template-length-mm" name="lengthMm" type="number" inputmode="numeric" min="12" max="300" step="1" aria-label="Length in millimetres" disabled>
-                <span>mm</span>
-              </div>
-            </fieldset>
-            <fieldset class="form-field rows-field">
-              <legend>Rows</legend>
+
+            <section class="designer-section" aria-labelledby="parts-title">
+              <h3 id="parts-title" class="designer-title">On the label</h3>
               <p class="hint">Write what changes from label to label in braces, like {Product}. It becomes a field to fill in.</p>
-              <div id="template-rows" class="template-rows"></div>
-              <div id="add-row" class="add-row"><span class="add-label">Add a row with:</span></div>
+              <div id="template-parts" class="parts"></div>
+              <div id="add-part" class="add-part"><span class="add-label">Add</span></div>
               <input id="template-image-file" type="file" accept="image/*" hidden>
-            </fieldset>
+            </section>
+
+            <section class="designer-section" aria-labelledby="look-title">
+              <h3 id="look-title" class="designer-title">Look</h3>
+              <div class="look">
+                <div class="form-field">
+                  <label for="template-font">Typeface</label>
+                  <select id="template-font" name="font">
+                    <option value="sans">Sans</option>
+                    <option value="serif">Serif</option>
+                    <option value="mono">Mono</option>
+                    <option value="condensed">Condensed</option>
+                  </select>
+                </div>
+                <div class="form-field">
+                  <label for="template-border">Border</label>
+                  <select id="template-border" name="border">
+                    <option value="none">None</option>
+                    <option value="thin">Thin</option>
+                    <option value="thick">Thick</option>
+                    <option value="rounded">Rounded</option>
+                  </select>
+                </div>
+                <div class="form-field">
+                  <label for="template-margin">Margins</label>
+                  <select id="template-margin" name="margin">
+                    <option value="s">Small</option>
+                    <option value="m" selected>Medium</option>
+                    <option value="l">Large</option>
+                  </select>
+                </div>
+                <div class="form-field">
+                  <label for="template-orientation">Orientation</label>
+                  <select id="template-orientation" name="orientation">
+                    <option value="landscape">Landscape, along the longer side</option>
+                    <option value="portrait">Portrait, along the shorter side</option>
+                  </select>
+                </div>
+                <div id="length-field" class="form-field">
+                  <label for="template-length">Length on the roll</label>
+                  <div class="length-input">
+                    <select id="template-length" name="length">
+                      <option value="auto">As long as the content</option>
+                      <option value="fixed">Fixed</option>
+                    </select>
+                    <span id="template-length-fixed" class="length-fixed" hidden>
+                      <input id="template-length-mm" name="lengthMm" type="number" inputmode="numeric" min="12" max="300" step="1" aria-label="Length in millimetres">
+                      <span>mm</span>
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </section>
+
             <p id="template-status" class="token-status" aria-live="polite"></p>
             <button id="preview-template" class="print preview-button" type="button">Preview</button>
             <div class="token-footer">
               <div id="template-actions" class="editor-actions">
-                <button id="print-template" class="button small" type="button">Fill in and print</button>
-                <button id="duplicate-template" class="button small" type="button">Duplicate</button>
-                <button id="export-template" class="button small" type="button">Export</button>
-                <button id="link-template" class="button small" type="button">Copy link</button>
-                <button id="delete-template" class="button small" type="button">Delete</button>
+                <button id="print-template" class="button primary" type="button">Fill in and print</button>
+                <button id="template-more" class="button menu-button" type="button" popovertarget="template-menu" aria-haspopup="menu">More</button>
+              </div>
+              <div id="template-menu" class="menu" popover>
+                <button id="duplicate-template" type="button" autofocus>Duplicate</button>
+                <button id="export-template" type="button">Export as a file</button>
+                <button id="link-template" type="button">Copy link</button>
+                <button id="delete-template" type="button">Delete</button>
               </div>
               <div id="template-delete-confirm" class="editor-actions" hidden>
                 <span id="template-delete-question"></span>

@@ -1,5 +1,5 @@
 import { addressParam, updateAddress } from "./address.js";
-import { element } from "./dom.js";
+import { dropDown, element } from "./dom.js";
 import { readSetting, writeSetting } from "./settings.js";
 
 /** @typedef {"find" | "create" | "markers" | "deck" | "labels" | "templates"} Mode */
@@ -75,12 +75,9 @@ export function createModes(onChange) {
       if (space !== spaceOf(current())) show(SPACES[space].home);
     });
   }
-  // The menu opens under the switch, wherever the header puts it.
+  dropDown(menu, switcher);
   menu.addEventListener("toggle", (event) => {
     if (!(event instanceof ToggleEvent) || event.newState !== "open") return;
-    const rect = switcher.getBoundingClientRect();
-    menu.style.top = `${rect.bottom + 4}px`;
-    menu.style.left = `${rect.left}px`;
     options.find((option) => option.dataset.space === document.body.dataset.space)?.focus();
   });
   // Going back returns to an address saved before the mode may have changed, so it is written again.

@@ -1,5 +1,5 @@
 /** @import { LabelDesign } from "../../designs.js" */
-/** @import { Block, ImageBlock, LabelTemplate, Row, TextSize } from "../../labels/template.js" */
+/** @import { Block, ImageBlock, LabelTemplate, Row, TextBlock, TextSize } from "../../labels/template.js" */
 /** @import { LabelSize } from "../label-size.js" */
 import { FONTS, loadFonts } from "../../imaging/fonts.js";
 import { prepareImage } from "../../imaging/images.js";
@@ -27,14 +27,15 @@ import {
 } from "../../labels/template-file.js";
 import { templateStore, tokenStore } from "../../store.js";
 import { addressParam, updateAddress } from "../address.js";
-import { drawBitmap, element, showProblem } from "../dom.js";
+import { drawBitmap, dropDown, element, showProblem } from "../dom.js";
 import { toast } from "../toast.js";
 
 const SAVE_DELAY_MS = 400;
-const MOST_BLOCKS_IN_A_ROW = 3;
+/** How many parts can print side by side. */
+const MOST_BESIDE = 3;
 
-/** What a new row or block starts as. */
-const NEW_BLOCKS = /** @type {const} */ ({
+/** What can be put on a label, and what each starts as. */
+const PARTS = /** @type {const} */ ({
   text: { name: "Text", make: () => textBlock({ text: "{Text}" }) },
   image: { name: "Image", make: () => /** @type {Block} */ (imageBlock()) },
   qr: { name: "QR code", make: () => /** @type {Block} */ (qrBlock()) },
@@ -57,10 +58,45 @@ const blankTemplate = () => ({
 const titleOf = (template) => template.name.trim() || "Untitled template";
 
 /**
+ * A block as the designer shows it: in reading order, with whether it sits beside the one before
+ * it. The rows a template prints in follow from that.
+ * @typedef {{ block: Block, beside: boolean }} Part
+ */
+
+/** @param {Row[]} rows @returns {Part[]} */
+const partsOf = (rows) =>
+  rows.flatMap(({ blocks }) => blocks.map((block, index) => ({ block, beside: index > 0 })));
+
+/** @param {Part[]} parts @returns {Row[]} */
+function rowsOf(parts) {
+  /** @type {Row[]} */
+  const rows = [];
+  for (const { block, beside } of parts) {
+    const last = rows.at(-1);
+    if (beside && last) last.blocks.push(block);
+    else rows.push({ blocks: [block] });
+  }
+  return rows;
+}
+
+/**
+ * The parts with the blocks at two places swapped. Where each place sits, beside or below, stays,
+ * so moving a part never changes the shape of the label.
+ * @param {Part[]} parts
+ * @param {number} from
+ * @param {number} to
+ */
+function swapped(parts, from, to) {
+  const blocks = parts.map(({ block }) => block);
+  [blocks[from], blocks[to]] = [blocks[to], blocks[from]];
+  return parts.map((part, index) => ({ ...part, block: blocks[index] }));
+}
+
+/**
  * The Templates tab: My templates, saved in this browser, and the designer for one. Templates save
  * themselves as they are edited.
  * @param {object} options
- * @param {LabelSize} options.labelSize  For the previews in My templates.
+ * @param {LabelSize} options.labelSize  For the previews in My templates, and whether a roll is loaded.
  * @param {(design: LabelDesign | undefined) => void} options.onShow  The template being designed
  *   changed, or none while My templates is shown.
  * @param {(templates: LabelTemplate[]) => void} options.onSaved  My templates changed.
@@ -80,14 +116,18 @@ export function createTemplatesView({ labelSize, onShow, onSaved, onPrint, onPre
     saveState: element("#template-save-state", HTMLElement),
     form: element("#template-form", HTMLFormElement),
     name: element("#template-name", HTMLInputElement),
-    lengthField: element("#length-field", HTMLFieldSetElement),
+    parts: element("#template-parts", HTMLElement),
+    addPart: element("#add-part", HTMLElement),
+    imageFile: element("#template-image-file", HTMLInputElement),
+    lengthField: element("#length-field", HTMLElement),
+    lengthFixed: element("#template-length-fixed", HTMLElement),
     lengthMm: element("#template-length-mm", HTMLInputElement),
-    rows: element("#template-rows", HTMLElement),
-    addRow: element("#add-row", HTMLElement),
     status: element("#template-status", HTMLElement),
     preview: element("#preview-template", HTMLButtonElement),
     actions: element("#template-actions", HTMLElement),
     print: element("#print-template", HTMLButtonElement),
+    more: element("#template-more", HTMLButtonElement),
+    menu: element("#template-menu", HTMLElement),
     duplicate: element("#duplicate-template", HTMLButtonElement),
     exportTemplate: element("#export-template", HTMLButtonElement),
     link: element("#link-template", HTMLButtonElement),
@@ -98,14 +138,13 @@ export function createTemplatesView({ labelSize, onShow, onSaved, onPrint, onPre
     deleteQuestion: element("#template-delete-question", HTMLElement),
     confirmDelete: element("#confirm-delete-template", HTMLButtonElement),
     cancelDelete: element("#cancel-delete-template", HTMLButtonElement),
-    imageFile: element("#template-image-file", HTMLInputElement),
   };
   const choice = {
-    orientation: /** @type {RadioNodeList} */ (ui.form.elements.namedItem("orientation")),
-    border: /** @type {RadioNodeList} */ (ui.form.elements.namedItem("border")),
-    margin: /** @type {RadioNodeList} */ (ui.form.elements.namedItem("margin")),
-    length: /** @type {RadioNodeList} */ (ui.form.elements.namedItem("length")),
     font: element("#template-font", HTMLSelectElement),
+    border: element("#template-border", HTMLSelectElement),
+    margin: element("#template-margin", HTMLSelectElement),
+    orientation: element("#template-orientation", HTMLSelectElement),
+    length: element("#template-length", HTMLSelectElement),
   };
 
   /** Saved templates, by name. @type {LabelTemplate[]} */
@@ -121,7 +160,7 @@ export function createTemplatesView({ labelSize, onShow, onSaved, onPrint, onPre
   /** @returns {LabelDesign} */
   const design = () => ({ type: "label", template, rows: [sampleValues(template)] });
 
-  /* The template's own settings */
+  /* The template's look */
 
   ui.form.addEventListener("submit", (event) => event.preventDefault());
   ui.form.addEventListener("input", (event) => {
@@ -134,8 +173,8 @@ export function createTemplatesView({ labelSize, onShow, onSaved, onPrint, onPre
       )
     )
       return;
-    if (target.closest("#template-rows")) {
-      blockInput(target);
+    if (target.closest("#template-parts")) {
+      partInput(target);
       return;
     }
     const fixed = choice.length.value === "fixed";
@@ -145,12 +184,13 @@ export function createTemplatesView({ labelSize, onShow, onSaved, onPrint, onPre
       ...template,
       name: ui.name.value,
       orientation: choice.orientation.value === "portrait" ? "portrait" : "landscape",
-      border: /** @type {LabelTemplate["border"]} */ (choice.border.value || "none"),
-      margin: /** @type {LabelTemplate["margin"]} */ (choice.margin.value || "m"),
+      border: /** @type {LabelTemplate["border"]} */ (choice.border.value),
+      margin: /** @type {LabelTemplate["margin"]} */ (choice.margin.value),
       lengthMm: fixed && typed > 0 ? lengthMm : undefined,
       font: /** @type {LabelTemplate["font"]} */ (choice.font.value in FONTS ? choice.font.value : "sans"),
     };
-    ui.lengthMm.disabled = !fixed;
+    ui.lengthFixed.hidden = !fixed;
+    if (fixed && target === choice.length) ui.lengthMm.focus();
     changed();
   });
 
@@ -159,36 +199,36 @@ export function createTemplatesView({ labelSize, onShow, onSaved, onPrint, onPre
     if (template.lengthMm) ui.lengthMm.value = String(template.lengthMm);
   });
 
-  /* Rows and blocks */
+  /** The length only matters on a continuous roll; a die-cut label has its own. */
+  function showLengthField() {
+    ui.lengthField.hidden = Boolean(labelSize.current.lengthMm);
+  }
 
-  /** The row and block an input belongs to. @param {Element} target */
-  const placeOf = (target) => {
-    const holder = target.closest("[data-row]");
-    return {
-      row: Number(holder instanceof HTMLElement ? holder.dataset.row : -1),
-      block: Number(
-        target.closest("[data-block]") instanceof HTMLElement
-          ? /** @type {HTMLElement} */ (target.closest("[data-block]")).dataset.block
-          : -1,
-      ),
-    };
-  };
+  labelSize.addEventListener("change", () => {
+    showLengthField();
+    if (!ui.library.hidden) showLists();
+  });
+
+  /* The parts of the label */
+
+  /** The row and block a control belongs to. @param {Element} target */
+  function placeOf(target) {
+    const part = target.closest(".part");
+    const { row = "-1", block = "-1" } = part instanceof HTMLElement ? part.dataset : {};
+    return { row: Number(row), block: Number(block) };
+  }
 
   /**
-   * Keeps what was typed into a block's controls, without redrawing the rows, so typing goes on.
+   * Keeps what was typed into a part's controls, without redrawing the list, so typing goes on.
    * @param {HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement} target
    */
-  function blockInput(target) {
+  function partInput(target) {
     const { row, block } = placeOf(target);
-    const current = template.rows[row]?.blocks[block];
-    if (!current) return;
+    if (!template.rows[row]?.blocks[block]) return;
     const setting = target.dataset.setting ?? target.name;
-    /** @type {Block} */
-    let next;
     const value =
       target instanceof HTMLInputElement && target.type === "checkbox" ? target.checked : target.value;
-    next = /** @type {Block} */ ({ ...current, [setting]: value });
-    updateBlock(row, block, () => next);
+    updateBlock(row, block, (current) => /** @type {Block} */ ({ ...current, [setting]: value }));
   }
 
   /**
@@ -207,96 +247,68 @@ export function createTemplatesView({ labelSize, onShow, onSaved, onPrint, onPre
   /** @param {Row[]} rows */
   function setRows(rows) {
     template = { ...template, rows };
-    showRows();
+    showParts();
     changed();
   }
 
-  function showRows() {
-    ui.rows.replaceChildren(...template.rows.map(rowElement));
-    ui.rows.hidden = template.rows.length === 0;
-  }
-
-  /**
-   * @param {Row} row
-   * @param {number} index
-   */
-  function rowElement(row, index) {
-    const holder = Object.assign(document.createElement("div"), { className: "template-row" });
-    holder.dataset.row = String(index);
-    const blocks = Object.assign(document.createElement("div"), { className: "row-blocks" });
-    blocks.append(
-      ...row.blocks.map((block, position) => blockElement(block, index, position, row.blocks.length)),
+  /** The parts as one list; those that print side by side are bracketed together. */
+  function showParts() {
+    let index = 0;
+    ui.parts.replaceChildren(
+      ...template.rows.map((row, r) => {
+        const holder = Object.assign(document.createElement("div"), { className: "part-row" });
+        holder.append(...row.blocks.map((block, b) => partElement(block, r, b, index++)));
+        return holder;
+      }),
     );
-    const tools = Object.assign(document.createElement("div"), { className: "row-tools" });
-    const label = Object.assign(document.createElement("span"), {
-      className: "row-label",
-      textContent: `Row ${index + 1}`,
-    });
-    tools.append(
-      label,
-      tool("Move up", "↑", index === 0, () => setRows(moved(template.rows, index, index - 1))),
-      tool("Move down", "↓", index === template.rows.length - 1, () =>
-        setRows(moved(template.rows, index, index + 1)),
-      ),
-      ...(row.blocks.length < MOST_BLOCKS_IN_A_ROW ? [addBesideMenu(index)] : []),
-      tool("Remove row", "Remove", false, () => setRows(template.rows.filter((_, i) => i !== index))),
-    );
-    holder.append(tools, blocks);
-    return holder;
-  }
-
-  /** @param {number} row */
-  function addBesideMenu(row) {
-    const holder = Object.assign(document.createElement("span"), { className: "add-beside" });
-    holder.append(
-      Object.assign(document.createElement("span"), { className: "add-label", textContent: "Add beside:" }),
-      ...Object.values(NEW_BLOCKS).map(({ name, make }) =>
-        tool(`Add ${name.toLowerCase()} beside`, name, false, () => {
-          const rows = template.rows.map((other, i) =>
-            i === row ? { blocks: [...other.blocks, make()] } : other,
-          );
-          setRows(rows);
-        }),
-      ),
-    );
-    return holder;
   }
 
   /**
    * @param {Block} block
    * @param {number} row
-   * @param {number} position
-   * @param {number} count  Blocks in the row.
+   * @param {number} position  In its row.
+   * @param {number} index  In reading order.
    */
-  function blockElement(block, row, position, count) {
-    const holder = Object.assign(document.createElement("div"), { className: "template-block" });
+  function partElement(block, row, position, index) {
+    const parts = partsOf(template.rows);
+    const holder = Object.assign(document.createElement("div"), { className: "part" });
+    holder.dataset.row = String(row);
     holder.dataset.block = String(position);
-    const head = Object.assign(document.createElement("div"), { className: "block-head" });
+    const head = Object.assign(document.createElement("div"), { className: "part-head" });
     head.append(
       Object.assign(document.createElement("span"), {
-        className: "block-kind",
-        textContent: NEW_BLOCKS[block.type].name,
+        className: "part-kind",
+        textContent: PARTS[block.type].name,
       }),
-      tool("Move left", "←", position === 0, () => swapBlocks(row, position, position - 1)),
-      tool("Move right", "→", position === count - 1, () => swapBlocks(row, position, position + 1)),
-      tool("Remove block", "×", false, () => {
+    );
+    if (index > 0) {
+      const beside = position > 0;
+      // Joining the row above is offered while the two rows together fit side by side.
+      const full =
+        !beside && template.rows[row - 1].blocks.length + template.rows[row].blocks.length > MOST_BESIDE;
+      const toggle = tool(
+        beside ? "Put it on its own line" : "Put it beside the one above",
+        "Beside the one above",
+        full,
+        () => setRows(rowsOf(parts.map((part, i) => (i === index ? { ...part, beside: !beside } : part)))),
+      );
+      toggle.setAttribute("aria-pressed", String(beside));
+      head.append(toggle);
+    }
+    head.append(
+      tool("Move up", "↑", index === 0, () => setRows(rowsOf(swapped(parts, index, index - 1)))),
+      tool("Move down", "↓", index === parts.length - 1, () =>
+        setRows(rowsOf(swapped(parts, index, index + 1))),
+      ),
+      tool("Remove", "Remove", false, () => {
         const rows = template.rows
-          .map((other, i) => (i === row ? { blocks: other.blocks.filter((_, b) => b !== position) } : other))
+          .map((other, r) => (r === row ? { blocks: other.blocks.filter((_, b) => b !== position) } : other))
           .filter((other) => other.blocks.length > 0);
         setRows(rows);
       }),
     );
-    holder.append(head, ...blockControls(block, row, position));
+    holder.append(head, ...partControls(block, row, position));
     return holder;
-  }
-
-  /**
-   * @param {number} row
-   * @param {number} from
-   * @param {number} to
-   */
-  function swapBlocks(row, from, to) {
-    setRows(template.rows.map((other, i) => (i === row ? { blocks: moved(other.blocks, from, to) } : other)));
   }
 
   /**
@@ -305,112 +317,111 @@ export function createTemplatesView({ labelSize, onShow, onSaved, onPrint, onPre
    * @param {number} position
    * @returns {HTMLElement[]}
    */
-  function blockControls(block, row, position) {
-    const id = `block-${row}-${position}`;
-    if (block.type === "divider") {
-      return [labelled("Line", id, select(["thin", "thick"], ["Thin", "Thick"], block.weight, "weight"))];
-    }
-    if (block.type === "space") {
-      return [
-        labelled("Height", id, select(["s", "m", "l"], ["Small", "Medium", "Large"], block.size, "size")),
-      ];
-    }
-    if (block.type === "image") return imageControls(block, row, position, id);
+  function partControls(block, row, position) {
+    const id = `part-${row}-${position}`;
+    const grid = Object.assign(document.createElement("div"), { className: "part-grid" });
     const widths = /** @type {(keyof typeof IMAGE_WIDTHS)[]} */ (Object.keys(IMAGE_WIDTHS));
-    if (block.type === "qr") {
-      const content = Object.assign(document.createElement("input"), {
-        name: "content",
-        value: block.content,
-        autocomplete: "off",
-        placeholder: "A link or text, e.g. {Link}",
-      });
-      const widthNames = widths.map((w) => IMAGE_WIDTHS[w].name);
-      return [
-        pair(
-          labelled("Content", `${id}-content`, content),
-          labelled("Takes", `${id}-width`, select(widths, widthNames, block.width, "width")),
-        ),
-      ];
+    const widthNames = widths.map((width) => IMAGE_WIDTHS[width].name);
+    switch (block.type) {
+      case "text":
+        return [textControls(block, row, position, id)];
+      case "image":
+        return imageControls(block, row, position, id);
+      case "divider": {
+        const weight = select(["thin", "thick"], ["Thin", "Thick"], block.weight, "weight");
+        grid.append(labelFor("Line", id, weight), weight);
+        break;
+      }
+      case "space": {
+        const size = select(["s", "m", "l"], ["Small", "Medium", "Large"], block.size, "size");
+        grid.append(labelFor("Height", id, size), size);
+        break;
+      }
+      case "qr": {
+        const content = input(block.content, "content", "A link or text, e.g. {Link}");
+        const width = select(widths, widthNames, block.width, "width");
+        grid.append(
+          labelFor("Content", id, content),
+          content,
+          labelFor("Width", `${id}-width`, width),
+          width,
+        );
+        break;
+      }
+      case "barcode": {
+        const content = input(block.content, "content", "Letters and digits, e.g. {Code}");
+        const heights = /** @type {(keyof typeof BARCODE_HEIGHTS)[]} */ (Object.keys(BARCODE_HEIGHTS));
+        const height = select(heights, ["Small", "Medium", "Large"], block.height, "height");
+        grid.append(
+          labelFor("Content", id, content),
+          content,
+          labelFor("Height", `${id}-height`, height),
+          line(height, checkbox("text", block.text, "Text under it")),
+        );
+        break;
+      }
     }
-    if (block.type === "barcode") {
-      const content = Object.assign(document.createElement("input"), {
-        name: "content",
-        value: block.content,
-        autocomplete: "off",
-        placeholder: "Letters and digits, e.g. {Code}",
-      });
-      const heights = /** @type {(keyof typeof BARCODE_HEIGHTS)[]} */ (Object.keys(BARCODE_HEIGHTS));
-      const caption = document.createElement("label");
-      caption.className = "checkbox";
-      caption.append(
-        Object.assign(document.createElement("input"), {
-          type: "checkbox",
-          name: "text",
-          checked: block.text,
-        }),
-        "Text under it",
-      );
-      return [
-        pair(
-          labelled("Content", `${id}-content`, content),
-          labelled(
-            "Height",
-            `${id}-height`,
-            select(heights, ["Small", "Medium", "Large"], block.height, "height"),
-          ),
-        ),
-        caption,
-      ];
-    }
+    return [grid];
+  }
+
+  /**
+   * A text's controls: the text and its size, how it is aligned, and a heading above it once one
+   * is wanted.
+   * @param {TextBlock} block
+   * @param {number} row
+   * @param {number} position
+   * @param {string} id
+   */
+  function textControls(block, row, position, id) {
     const sizes = /** @type {TextSize[]} */ (Object.keys(TEXT_SIZES));
     const names = sizes.map((size) => TEXT_SIZES[size].name);
-    const heading = Object.assign(document.createElement("input"), {
-      name: "heading",
-      value: block.heading,
-      autocomplete: "off",
-      placeholder: "Optional, above the text",
-    });
+    const heading = input(block.heading, "heading", "");
+    const headingLabel = labelFor("Heading", `${id}-heading`, heading);
+    const headingPair = pair(heading, select(sizes, names, block.headingSize, "headingSize", "Heading size"));
     const text = Object.assign(document.createElement("textarea"), {
       name: "text",
       value: block.text,
       rows: 2,
     });
-    const align = document.createElement("div");
-    align.className = "segmented small";
+    const align = Object.assign(document.createElement("div"), { className: "segmented" });
     for (const [value, name] of [
       ["start", "Left"],
       ["center", "Centre"],
       ["end", "Right"],
     ]) {
       const label = document.createElement("label");
-      // Each block's radios are their own group.
-      const input = Object.assign(document.createElement("input"), {
+      // Each part's radios are their own group.
+      const radio = Object.assign(document.createElement("input"), {
         type: "radio",
         name: `align-${row}-${position}`,
         value,
         checked: block.align === value,
       });
-      input.dataset.setting = "align";
-      label.append(input, Object.assign(document.createElement("span"), { textContent: name }));
+      radio.dataset.setting = "align";
+      label.append(radio, Object.assign(document.createElement("span"), { textContent: name }));
       align.append(label);
     }
-    const bold = document.createElement("label");
-    bold.className = "checkbox";
-    bold.append(
-      Object.assign(document.createElement("input"), { type: "checkbox", name: "bold", checked: block.bold }),
-      "Bold",
+    const addHeading = Object.assign(document.createElement("button"), {
+      type: "button",
+      className: "text-button tool",
+      textContent: "Add a heading",
+    });
+    addHeading.addEventListener("click", () => {
+      headingLabel.hidden = headingPair.hidden = false;
+      addHeading.hidden = true;
+      heading.focus();
+    });
+    headingLabel.hidden = headingPair.hidden = !block.heading;
+    addHeading.hidden = Boolean(block.heading);
+    const grid = Object.assign(document.createElement("div"), { className: "part-grid" });
+    grid.append(
+      headingLabel,
+      headingPair,
+      labelFor("Text", `${id}-text`, text),
+      pair(text, select(sizes, names, block.size, "size", "Text size")),
+      line(align, checkbox("bold", block.bold, "Bold"), addHeading),
     );
-    return [
-      pair(
-        labelled("Heading", `${id}-heading`, heading),
-        labelled("Size", `${id}-heading-size`, select(sizes, names, block.headingSize, "headingSize")),
-      ),
-      pair(
-        labelled("Text", `${id}-text`, text),
-        labelled("Size", `${id}-text-size`, select(sizes, names, block.size, "size")),
-      ),
-      pair(align, bold),
-    ];
+    return grid;
   }
 
   /**
@@ -421,21 +432,28 @@ export function createTemplatesView({ labelSize, onShow, onSaved, onPrint, onPre
    * @returns {HTMLElement[]}
    */
   function imageControls(block, row, position, id) {
-    const drop = Object.assign(document.createElement("div"), { className: "image-drop block-image" });
+    const drop = Object.assign(document.createElement("div"), { className: "image-drop part-image" });
     const choose = Object.assign(document.createElement("button"), {
       type: "button",
       className: "button small",
-      textContent: block.image ? "Replace image" : "Choose image",
+      textContent: block.image ? "Replace" : "Choose image",
     });
     choose.addEventListener("click", () => {
       pendingImage = { row, position };
       ui.imageFile.click();
     });
-    const words = Object.assign(document.createElement("p"), {
-      textContent: block.image ? "Image added. Drop another here to replace it." : "Drop an image here, or",
-    });
-    drop.append(words, choose);
     if (block.image) {
+      const thumbnail = Object.assign(document.createElement("img"), { className: "part-thumb", alt: "" });
+      tokenStore
+        .getImage(block.image.id)
+        .then((blob) => {
+          if (!(blob instanceof Blob)) return;
+          thumbnail.src = URL.createObjectURL(blob);
+          thumbnail.onload = () => URL.revokeObjectURL(thumbnail.src);
+        })
+        .catch(() => {
+          // The part can be changed without its picture.
+        });
       const remove = Object.assign(document.createElement("button"), {
         type: "button",
         className: "button small",
@@ -443,9 +461,14 @@ export function createTemplatesView({ labelSize, onShow, onSaved, onPrint, onPre
       });
       remove.addEventListener("click", () => {
         updateBlock(row, position, (b) => ({ ...b, image: undefined }));
-        showRows();
+        showParts();
       });
-      drop.append(remove);
+      drop.append(thumbnail, choose, remove);
+    } else {
+      drop.append(
+        Object.assign(document.createElement("p"), { textContent: "Drop an image here, or" }),
+        choose,
+      );
     }
     drop.addEventListener("dragover", (event) => {
       event.preventDefault();
@@ -459,23 +482,24 @@ export function createTemplatesView({ labelSize, onShow, onSaved, onPrint, onPre
       if (file) useImage(file, row, position);
     });
     const widths = /** @type {(keyof typeof IMAGE_WIDTHS)[]} */ (Object.keys(IMAGE_WIDTHS));
-    const widthNames = widths.map((w) => IMAGE_WIDTHS[w].name);
-    return [
-      drop,
-      pair(
-        labelled("Takes", `${id}-width`, select(widths, widthNames, block.width, "width")),
-        labelled(
-          "Kind",
-          `${id}-treatment`,
-          select(["logo", "photo"], ["Logo, crisp", "Photo, dithered"], block.treatment, "treatment"),
-        ),
-        labelled(
-          "Show",
-          `${id}-show`,
-          select(["fit", "fill"], ["Whole image", "Fill the box"], block.show, "show"),
-        ),
-      ),
-    ];
+    const width = select(
+      widths,
+      widths.map((w) => IMAGE_WIDTHS[w].name),
+      block.width,
+      "width",
+    );
+    const kind = select(["logo", "photo"], ["Logo, crisp", "Photo, dithered"], block.treatment, "treatment");
+    const show = select(["fit", "fill"], ["Whole image", "Fill the box"], block.show, "show");
+    const grid = Object.assign(document.createElement("div"), { className: "part-grid" });
+    grid.append(
+      labelFor("Width", `${id}-width`, width),
+      width,
+      labelFor("Kind", `${id}-kind`, kind),
+      kind,
+      labelFor("Show", `${id}-show`, show),
+      show,
+    );
+    return [drop, grid];
   }
 
   /** The block waiting for the file being chosen. @type {{ row: number, position: number } | undefined} */
@@ -521,7 +545,26 @@ export function createTemplatesView({ labelSize, onShow, onSaved, onPrint, onPre
     }
     ui.status.textContent = "";
     updateBlock(row, position, (b) => ({ ...b, image: { id, ...size } }));
-    showRows();
+    showParts();
+  }
+
+  for (const { name, make } of Object.values(PARTS)) {
+    const button = Object.assign(document.createElement("button"), {
+      type: "button",
+      className: "button small",
+      textContent: name,
+    });
+    button.setAttribute("aria-label", `Add ${name.toLowerCase()}`);
+    button.addEventListener("click", () => {
+      setRows([...template.rows, { blocks: [make()] }]);
+      const added = ui.parts.lastElementChild?.lastElementChild;
+      for (const control of added?.querySelectorAll("input, textarea, select, .button") ?? []) {
+        if (!(control instanceof HTMLElement) || !control.checkVisibility()) continue;
+        control.focus();
+        break;
+      }
+    });
+    ui.addPart.append(button);
   }
 
   /* Elements */
@@ -546,63 +589,62 @@ export function createTemplatesView({ labelSize, onShow, onSaved, onPrint, onPre
   }
 
   /**
+   * @param {string} value
+   * @param {string} name
+   * @param {string} placeholder
+   */
+  const input = (value, name, placeholder) =>
+    Object.assign(document.createElement("input"), { name, value, placeholder, autocomplete: "off" });
+
+  /**
    * @template {string} T
    * @param {readonly T[]} values
    * @param {readonly string[]} names
    * @param {T} chosen
    * @param {string} name
+   * @param {string} [label]  When no label is shown beside it.
    */
-  function select(values, names, chosen, name) {
+  function select(values, names, chosen, name, label) {
     const menu = Object.assign(document.createElement("select"), { name });
     menu.append(...values.map((value, i) => new Option(names[i], value, false, value === chosen)));
+    if (label) menu.setAttribute("aria-label", label);
     return menu;
   }
 
   /**
+   * @param {string} name
+   * @param {boolean} checked
    * @param {string} text
-   * @param {string} id
-   * @param {HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement} control
    */
-  function labelled(text, id, control) {
-    const field = Object.assign(document.createElement("div"), { className: "block-field" });
-    control.id = id;
-    field.append(Object.assign(document.createElement("label"), { htmlFor: id, textContent: text }), control);
-    return field;
+  function checkbox(name, checked, text) {
+    const label = Object.assign(document.createElement("label"), { className: "checkbox" });
+    label.append(Object.assign(document.createElement("input"), { type: "checkbox", name, checked }), text);
+    return label;
   }
 
-  /** @param {HTMLElement[]} parts */
+  /**
+   * A label for a control, which gets the ID.
+   * @param {string} text
+   * @param {string} id
+   * @param {HTMLElement} control
+   */
+  function labelFor(text, id, control) {
+    control.id = id;
+    return Object.assign(document.createElement("label"), { htmlFor: id, textContent: text });
+  }
+
+  /** A text and its size, side by side. @param {HTMLElement[]} parts */
   function pair(...parts) {
-    const holder = Object.assign(document.createElement("div"), { className: "block-pair" });
+    const holder = Object.assign(document.createElement("div"), { className: "part-pair" });
     holder.append(...parts);
     return holder;
   }
 
-  /**
-   * @template T
-   * @param {readonly T[]} items
-   * @param {number} from
-   * @param {number} to
-   */
-  function moved(items, from, to) {
-    const next = [...items];
-    const [item] = next.splice(from, 1);
-    next.splice(to, 0, item);
-    return next;
-  }
-
-  for (const { name, make } of Object.values(NEW_BLOCKS)) {
-    const button = Object.assign(document.createElement("button"), {
-      type: "button",
-      className: "button small",
-      textContent: name,
-    });
-    button.setAttribute("aria-label", `Add a row with ${name.toLowerCase()}`);
-    button.addEventListener("click", () => {
-      setRows([...template.rows, { blocks: [make()] }]);
-      const added = ui.rows.lastElementChild?.querySelector("input, textarea, select");
-      if (added instanceof HTMLElement) added.focus();
-    });
-    ui.addRow.append(button);
+  /** Small controls in a line. @param {HTMLElement[]} parts */
+  function line(...parts) {
+    const holder = Object.assign(document.createElement("div"), { className: "part-line" });
+    holder.append(...parts);
+    return holder;
   }
 
   /* Saving */
@@ -654,10 +696,6 @@ export function createTemplatesView({ labelSize, onShow, onSaved, onPrint, onPre
     showLibrary();
     const button = [...ui.savedList.querySelectorAll("button")].find((item) => item.dataset.id === shown);
     (button ?? ui.newTemplate).focus();
-  });
-
-  labelSize.addEventListener("change", () => {
-    if (!ui.library.hidden) showLists();
   });
 
   /** @param {string} [problem]  e.g. why a link couldn't be opened. */
@@ -721,12 +759,13 @@ export function createTemplatesView({ labelSize, onShow, onSaved, onPrint, onPre
     choice.length.value = next.lengthMm ? "fixed" : "auto";
     choice.font.value = next.font ?? "sans";
     ui.lengthMm.value = next.lengthMm ? String(next.lengthMm) : "";
-    ui.lengthMm.disabled = !next.lengthMm;
+    ui.lengthFixed.hidden = !next.lengthMm;
+    showLengthField();
     ui.status.textContent = "";
     delete ui.status.dataset.tone;
     ui.library.hidden = true;
     ui.editor.hidden = false;
-    showRows();
+    showParts();
     showActions();
     onShow(design());
   }
@@ -736,11 +775,9 @@ export function createTemplatesView({ labelSize, onShow, onSaved, onPrint, onPre
     ui.toLibrary.hidden = saved.length === 0;
     ui.saveState.textContent = !isSaved() ? "" : canSave ? "Saved in this browser" : "Not saved";
     ui.actions.hidden = confirmingDelete;
-    ui.duplicate.hidden = !isSaved();
-    ui.exportTemplate.hidden = !isSaved();
+    ui.more.hidden = !isSaved();
     // A template with images is too big for a link; it travels as a file.
-    ui.link.hidden = !isSaved() || imageIdsOf(template).length > 0;
-    ui.deleteTemplate.hidden = !isSaved();
+    ui.link.hidden = imageIdsOf(template).length > 0;
     ui.deleteConfirm.hidden = !confirmingDelete;
     ui.deleteQuestion.textContent = `Delete ${titleOf(template)}?`;
   }
@@ -750,6 +787,11 @@ export function createTemplatesView({ labelSize, onShow, onSaved, onPrint, onPre
     // The Print tab shows saved templates and starters, so an opened starter becomes one of yours.
     save();
     onPrint(template);
+  });
+
+  dropDown(ui.menu, ui.more);
+  ui.menu.addEventListener("click", (event) => {
+    if (event.target instanceof HTMLButtonElement) ui.menu.hidePopover();
   });
 
   /* Files and links */
@@ -872,7 +914,7 @@ export function createTemplatesView({ labelSize, onShow, onSaved, onPrint, onPre
   });
   ui.cancelDelete.addEventListener("click", () => {
     showActions();
-    ui.deleteTemplate.focus();
+    ui.more.focus();
   });
   ui.confirmDelete.addEventListener("click", async () => {
     const deleted = template;
