@@ -5,9 +5,10 @@
 /** @import { Bitmap, Media } from "./printers/types.js" */
 /** @import { ScryfallCard } from "./scryfall/client.js" */
 import { CENTERED } from "./imaging/arrangement.js";
-import { canvasContext, loadFonts } from "./imaging/canvas-text.js";
+import { canvasContext } from "./imaging/canvas-text.js";
 import { cardSize, renderCard, TONES } from "./imaging/card.js";
 import { foldedPage, foldMargin } from "./imaging/fold.js";
+import { loadFonts } from "./imaging/fonts.js";
 import { loadImage } from "./imaging/images.js";
 import { labelLength, renderLabel } from "./imaging/label-render.js";
 import { layoutMarkers, renderMarkers } from "./imaging/marker-sheet.js";
@@ -96,7 +97,10 @@ export async function renderDesign(design, media) {
     return renderMarkers(design.counts, media, design.custom);
   }
   if (design.type === "label") {
-    const [images] = await Promise.all([loadTemplateImages(design.template), loadFonts()]);
+    const [images] = await Promise.all([
+      loadTemplateImages(design.template),
+      loadFonts(design.template.font),
+    ]);
     const tone = TONES[design.darkness ?? "normal"];
     return design.rows.map((values) => renderLabel(design.template, values, media, { images, tone }));
   }

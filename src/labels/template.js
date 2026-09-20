@@ -54,7 +54,20 @@ export const IMAGE_WIDTHS = /** @type {const} */ ({
  * @property {"fit" | "fill"} show  The whole image inside its box, or the box filled and the image cropped.
  */
 
-/** @typedef {TextBlock | DividerBlock | SpaceBlock | ImageBlock} Block */
+/**
+ * A QR code of some text, which can hold placeholders, e.g. a link for each product.
+ * @typedef {{ type: "qr", content: string, width: keyof typeof IMAGE_WIDTHS }} QrBlock
+ */
+
+/** How tall a barcode's bars are, in millimetres. */
+export const BARCODE_HEIGHTS = /** @type {const} */ ({ s: 8, m: 12, l: 18 });
+
+/**
+ * A Code 128 barcode of some text, which can hold placeholders, with the text under it if wanted.
+ * @typedef {{ type: "barcode", content: string, height: keyof typeof BARCODE_HEIGHTS, text: boolean }} BarcodeBlock
+ */
+
+/** @typedef {TextBlock | DividerBlock | SpaceBlock | ImageBlock | QrBlock | BarcodeBlock} Block */
 
 /** Blocks side by side, sharing the width. @typedef {{ blocks: Block[] }} Row */
 
@@ -62,10 +75,11 @@ export const IMAGE_WIDTHS = /** @type {const} */ ({
  * @typedef {object} LabelTemplate
  * @property {string} id
  * @property {string} name
- * @property {"portrait" | "landscape"} orientation  Landscape runs along a continuous roll.
+ * @property {"portrait" | "landscape"} orientation  Landscape reads along the label's longer side.
  * @property {"none" | "thin" | "thick" | "rounded"} border
  * @property {"s" | "m" | "l"} margin  Room between the border and the content.
  * @property {number} [lengthMm]  A fixed length on continuous rolls; without it, the content decides.
+ * @property {import("../imaging/fonts.js").FontName} [font]  Sans when missing.
  * @property {Row[]} rows
  */
 
@@ -104,6 +118,7 @@ export function fieldsOf(template) {
   };
   for (const { blocks } of template.rows) {
     for (const block of blocks) {
+      if (block.type === "qr" || block.type === "barcode") collect(block.content, false);
       if (block.type !== "text") continue;
       collect(block.heading, false);
       collect(block.text, isOnlyPlaceholder(block.text));
@@ -195,3 +210,21 @@ export function imageIdsOf(template) {
     blocks.flatMap((block) => (block.type === "image" && block.image ? [block.image.id] : [])),
   );
 }
+
+/**
+ * @param {Partial<QrBlock>} [block]
+ * @returns {QrBlock}
+ */
+export const qrBlock = (block = {}) => ({ type: "qr", content: "{Link}", width: "third", ...block });
+
+/**
+ * @param {Partial<BarcodeBlock>} [block]
+ * @returns {BarcodeBlock}
+ */
+export const barcodeBlock = (block = {}) => ({
+  type: "barcode",
+  content: "{Code}",
+  height: "m",
+  text: true,
+  ...block,
+});

@@ -1,6 +1,7 @@
 /** @import { Block, LabelTemplate, TextSize, Values } from "../labels/template.js" */
 /** @import { Media } from "../printers/types.js" */
-import { fill, IMAGE_WIDTHS, TEXT_SIZES } from "../labels/template.js";
+import { BARCODE_HEIGHTS, fill, IMAGE_WIDTHS, TEXT_SIZES } from "../labels/template.js";
+import { barcodeModules, code128 } from "./barcode.js";
 
 /** Room between the border and the content, in millimetres. */
 export const MARGINS = { s: 1.5, m: 3, l: 5 };
@@ -37,11 +38,26 @@ const SMALLEST_SCALE = 0.4;
 
 /** Lines of text at a size, ready to draw. @typedef {{ size: number, lines: string[], bold: boolean }} PlacedText */
 
+/** The smallest a barcode's module prints, in dots, so that it still scans. */
+export const LEAST_MODULE_DOTS = 2;
+/** Room for the text under a barcode, as a multiple of its size. */
+const BARCODE_TEXT_LINE = 1.4;
+
 /**
  * A block where it goes. `room` is the width it may take, infinite when the label is as wide as
  * its content; `width` is what it takes until the rows are laid out, then its share of the row.
- * An image keeps the width its block asks for.
- * @typedef {Rect & { block: Block, room: number, fixed?: boolean, heading?: PlacedText, text?: PlacedText }} PlacedBlock
+ * An image or QR code keeps the width its block asks for. A barcode carries its bar widths and
+ * the text under it, if any.
+ * @typedef {Rect & {
+ *   block: Block,
+ *   room: number,
+ *   fixed?: boolean,
+ *   heading?: PlacedText,
+ *   text?: PlacedText,
+ *   bars?: number[],
+ *   caption?: PlacedText,
+ *   code?: string,
+ * }} PlacedBlock
  */
 
 /**
@@ -89,7 +105,7 @@ export function layoutLabel(template, values, frame, dotsPerMm, measure) {
     // Every block at its named size; Fit text is measured later, once the room left is known.
     const rows = template.rows.map(({ blocks }) => {
       const gaps = (blocks.length - 1) * BLOCK_GAP * mm;
-      const images = blocks.map((block) => imageSize(block, imageBasis, contentHeight));
+      const images = blocks.map((block) => imageSize(block, values, imageBasis, contentHeight));
       const imagesWidth = images.reduce((sum, size) => sum + (size?.width ?? 0), 0);
       const flexible = images.filter((size) => !size).length;
       const share = autoWidth
@@ -97,7 +113,10 @@ export function layoutLabel(template, values, frame, dotsPerMm, measure) {
         : Math.max(0, contentWidth - gaps - imagesWidth) / flexible;
       return blocks.map((block, i) => {
         const size = images[i];
-        if (size) return { block, room: size.width, fixed: true, x: 0, y: 0, ...size };
+        if (size) {
+          const code = block.type === "qr" ? fill(block.content, values).trim() : undefined;
+          return { block, room: size.width, fixed: true, x: 0, y: 0, ...size, code };
+        }
         return placeBlock(block, values, share, dots, measure, mm);
       });
     });
@@ -192,7 +211,22 @@ export function layoutLabel(template, values, frame, dotsPerMm, measure) {
  */
 function placeBlock(block, values, width, dots, measure, mm) {
   const placed = { block, x: 0, y: 0, width: 0, height: 0, room: width };
-  if (block.type === "image") return { ...placed, fixed: true };
+  if (block.type === "image" || block.type === "qr") return { ...placed, fixed: true };
+  if (block.type === "barcode") {
+    const content = fill(block.content, values).trim();
+    if (!content) return placed;
+    const bars = code128(content);
+    const size = TEXT_SIZES.xs.mm * mm;
+    const caption = block.text ? { size, bold: false, lines: [content] } : undefined;
+    return {
+      ...placed,
+      bars,
+      caption,
+      // As wide as its bars at the smallest module that scans; a wider block spreads them.
+      width: barcodeModules(bars) * LEAST_MODULE_DOTS,
+      height: BARCODE_HEIGHTS[block.height] * mm + (caption ? size * BARCODE_TEXT_LINE : 0),
+    };
+  }
   if (block.type === "space") return { ...placed, height: SPACES[block.size] * mm };
   if (block.type === "divider")
     return { ...placed, height: (DIVIDERS[block.weight] + 2 * DIVIDER_ROOM) * mm };
@@ -208,16 +242,19 @@ function placeBlock(block, values, width, dots, measure, mm) {
 }
 
 /**
- * The box an image block takes: its share of the label across, as tall as the image's proportions
- * make it, and never taller than the label. Nothing without an image.
+ * The box an image or QR code takes: its share of the label across, as tall as the image's
+ * proportions make it (square for a QR code), and never taller than the label. Nothing without an
+ * image.
  * @param {Block} block
+ * @param {Values} values
  * @param {number} basis  What the share is of.
  * @param {number} tallest
  */
-function imageSize(block, basis, tallest) {
-  if (block.type !== "image") return undefined;
-  if (!block.image) return { width: 0, height: 0 };
-  const aspect = block.image.height / block.image.width;
+function imageSize(block, values, basis, tallest) {
+  if (block.type !== "image" && block.type !== "qr") return undefined;
+  if (block.type === "image" && !block.image) return { width: 0, height: 0 };
+  if (block.type === "qr" && !fill(block.content, values).trim()) return { width: 0, height: 0 };
+  const aspect = block.type === "image" && block.image ? block.image.height / block.image.width : 1;
   let width = IMAGE_WIDTHS[block.width].fraction * basis;
   let height = width * aspect;
   if (height > tallest) {
@@ -321,20 +358,43 @@ const hasFitText = ({ heading, text }) => Boolean((heading && !heading.size) || 
 const clamp = (value, min, max) => Math.min(Math.max(value, min), max);
 
 /**
- * The frame a template lays out in on a paper: portrait takes the paper as it is; landscape turns
- * it, so the layout's width runs along the roll. Round labels use the square inside the circle.
+ * How long the label is along the roll, in dots: what the template fixes, else what the paper has,
+ * which is 0 on a continuous roll.
+ * @param {LabelTemplate} template
+ * @param {Media} media
+ */
+const lengthOf = (template, media) =>
+  template.lengthMm ? Math.round((template.lengthMm * media.dpi) / 25.4) : media.printableHeight;
+
+/**
+ * Whether the label is drawn turned a quarter turn, so its lines run along the roll. Landscape
+ * reads along the label's longer side and portrait along its shorter one: on a continuous roll or
+ * a long die-cut label that is along the roll, on a wide short label it is across. Round labels
+ * are never turned.
+ * @param {LabelTemplate} template
+ * @param {Media} media
+ */
+export function isTurned(template, media) {
+  if (media.shape === "round") return false;
+  const length = lengthOf(template, media);
+  const longSideAlong = length === 0 || length >= media.printableWidth;
+  return template.orientation === "landscape" ? longSideAlong : !longSideAlong;
+}
+
+/**
+ * The frame a template lays out in on a paper, before any turn. Round labels use the square inside
+ * the circle.
  * @param {LabelTemplate} template
  * @param {Media} media
  * @returns {Frame}
  */
 export function frameOf(template, media) {
-  const dotsPerMm = media.dpi / 25.4;
   if (media.shape === "round") {
     const side = Math.floor(media.printableWidth / Math.SQRT2);
     return { width: side, height: side };
   }
-  const length = template.lengthMm ? Math.round(template.lengthMm * dotsPerMm) : media.printableHeight;
-  return template.orientation === "landscape"
+  const length = lengthOf(template, media);
+  return isTurned(template, media)
     ? { width: length, height: media.printableWidth }
     : { width: media.printableWidth, height: length };
 }

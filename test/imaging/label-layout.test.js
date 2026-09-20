@@ -1,7 +1,14 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { AUTO_LENGTH_MM, frameOf, layoutLabel, MARGINS } from "../../src/imaging/label-layout.js";
-import { imageBlock, TEXT_SIZES, textBlock } from "../../src/labels/template.js";
+import { AUTO_LENGTH_MM, frameOf, isTurned, layoutLabel, MARGINS } from "../../src/imaging/label-layout.js";
+import {
+  BARCODE_HEIGHTS,
+  barcodeBlock,
+  imageBlock,
+  qrBlock,
+  TEXT_SIZES,
+  textBlock,
+} from "../../src/labels/template.js";
 import { MEDIA } from "../../src/printers/brother-ql/media.js";
 
 const DPMM = 300 / 25.4;
@@ -29,18 +36,30 @@ const template = (template) => ({
   ...template,
 });
 
-test("landscape turns the frame and a continuous roll leaves the length to the content", () => {
-  assert.deepEqual(frameOf(template({}), media("62x29")), { width: 696, height: 271 });
+test("landscape reads along the longer side, portrait along the shorter; a roll leaves the length free", () => {
+  // A 62 × 29 label is wider than it is long: landscape reads across, portrait along.
   assert.deepEqual(frameOf(template({ orientation: "landscape" }), media("62x29")), {
-    width: 271,
+    width: 696,
+    height: 271,
+  });
+  assert.deepEqual(frameOf(template({}), media("62x29")), { width: 271, height: 696 });
+  assert.equal(isTurned(template({}), media("62x29")), true);
+  // A 62 × 100 label is longer than it is wide: landscape reads along the roll.
+  assert.deepEqual(frameOf(template({ orientation: "landscape" }), media("62x100")), {
+    width: 1109,
     height: 696,
   });
+  assert.deepEqual(frameOf(template({}), media("62x100")), { width: 696, height: 1109 });
+  // A continuous roll is as long as the content, so landscape runs along it.
   assert.deepEqual(frameOf(template({}), media("62")), { width: 696, height: 0 });
   assert.deepEqual(frameOf(template({ orientation: "landscape" }), media("62")), { width: 0, height: 696 });
-  assert.deepEqual(frameOf(template({ lengthMm: 50 }), media("62")), {
+  // A fixed 50 mm piece of a 62 mm roll is wider than it is long, like a 62 × 50 label.
+  const piece = Math.round(50 * DPMM);
+  assert.deepEqual(frameOf(template({ orientation: "landscape", lengthMm: 50 }), media("62")), {
     width: 696,
-    height: Math.round(50 * DPMM),
+    height: piece,
   });
+  assert.deepEqual(frameOf(template({ lengthMm: 50 }), media("62")), { width: piece, height: 696 });
   const round = frameOf(template({ orientation: "landscape" }), media("d58"));
   assert.equal(round.width, round.height);
   assert.equal(round.width, Math.floor(media("d58").printableWidth / Math.SQRT2));
@@ -203,4 +222,44 @@ test("a tall image is capped at the label's height, and shares the height on a l
   const across = 696 - 2 * Math.round(MARGINS.s * DPMM);
   assert.equal(wide.blocks[0].height, Math.round(across / 2));
   assert.equal(wide.blocks[0].width, Math.round(across / 2));
+});
+
+test("a QR code is a square share of the width, and nothing while its content is empty", () => {
+  const t = template({
+    margin: "s",
+    rows: [{ blocks: [qrBlock({ content: "{Link}", width: "half" }), textBlock({ text: "T" })] }],
+  });
+  const content = 600 - 2 * Math.round(MARGINS.s * DPMM);
+  const layout = layoutLabel(t, { Link: "https://example.com" }, { width: 600, height: 400 }, DPMM, measure);
+  const [qr] = layout.blocks;
+  assert.equal(qr.width, Math.round(content / 2));
+  assert.equal(qr.height, qr.width);
+  assert.equal(qr.code, "https://example.com");
+  const empty = layoutLabel(t, {}, { width: 600, height: 400 }, DPMM, measure);
+  assert.equal(empty.blocks[0].width, 0);
+});
+
+test("a barcode is as wide as its row, as tall as chosen plus its text, and knows its bars", () => {
+  const t = template({
+    margin: "s",
+    rows: [{ blocks: [barcodeBlock({ content: "{Code}", height: "l", text: true })] }],
+  });
+  const layout = layoutLabel(t, { Code: "AB-123" }, { width: 900, height: 400 }, DPMM, measure);
+  const [bar] = layout.blocks;
+  assert.equal(bar.width, 900 - 2 * Math.round(MARGINS.s * DPMM));
+  assert.ok(bar.bars && bar.bars.length > 0);
+  assert.deepEqual(bar.caption?.lines, ["AB-123"]);
+  assert.ok(bar.height > BARCODE_HEIGHTS.l * DPMM);
+  const bare = layoutLabel(
+    { ...t, rows: [{ blocks: [barcodeBlock({ content: "X", height: "s", text: false })] }] },
+    {},
+    { width: 900, height: 400 },
+    DPMM,
+    measure,
+  );
+  assert.equal(bare.blocks[0].height, Math.round(BARCODE_HEIGHTS.s * DPMM));
+  // On a label as wide as its content, the bars set the width at the smallest module that scans.
+  const wide = layoutLabel(t, { Code: "AB-123" }, { width: 0, height: 696 }, DPMM, measure);
+  assert.ok(wide.blocks[0].width > 0);
+  assert.equal(wide.width, wide.blocks[0].width + 2 * Math.round(MARGINS.s * DPMM));
 });

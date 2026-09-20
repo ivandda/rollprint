@@ -1,22 +1,9 @@
 /** Drawing text on a canvas for thermal printing. */
 
-const FONT_FAMILY = '"Atkinson Hyperlegible Next", system-ui, sans-serif';
+import { font } from "./fonts.js";
 
 /** Keeps the grey edges of letters when converting to dots, so thin strokes of small text still print. */
 export const TEXT_THRESHOLD = 190;
-
-/** Waits for the typeface, which a canvas doesn't load by itself. */
-export async function loadFonts() {
-  await Promise.all([document.fonts.load(font(400, 16)), document.fonts.load(font(700, 16))]);
-}
-
-/**
- * @param {number} weight
- * @param {number} size  In pixels.
- */
-export function font(weight, size) {
-  return `${weight} ${size}px ${FONT_FAMILY}`;
-}
 
 /**
  * The largest size, up to `largest`, at which one line of text fits the width; at least half of it.
